@@ -1,0 +1,1 @@
+"""Salesforce Einstein scoring adapter."""

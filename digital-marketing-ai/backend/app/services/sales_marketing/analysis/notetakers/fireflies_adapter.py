@@ -1,0 +1,1 @@
+"""Fireflies notetaker adapter."""
