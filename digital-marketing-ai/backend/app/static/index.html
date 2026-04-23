@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Profile Engine Demo</title>
+    <style>
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; max-width: 900px; margin: 24px auto; padding: 0 16px; }
+      textarea { width: 100%; min-height: 120px; padding: 10px; font-size: 14px; }
+      input[type="text"] { width: 100%; padding: 10px; font-size: 14px; }
+      button { padding: 10px 14px; font-size: 14px; cursor: pointer; }
+      .row { display: grid; grid-template-columns: 1fr; gap: 12px; }
+      .card { border: 1px solid #ddd; border-radius: 10px; padding: 14px; }
+      .muted { color: #666; font-size: 13px; }
+      pre { white-space: pre-wrap; word-break: break-word; background: #f7f7f7; padding: 12px; border-radius: 10px; overflow: auto; }
+      .error { color: #b00020; }
+      .success { color: #0a7a0a; }
+      .chat { background: #fafafa; border: 1px solid #eee; border-radius: 10px; padding: 10px; min-height: 120px; }
+      .msg { display: flex; margin: 8px 0; }
+      .msg.user { justify-content: flex-end; }
+      .bubble { max-width: 80%; padding: 10px 12px; border-radius: 12px; line-height: 1.35; white-space: pre-wrap; word-break: break-word; }
+      .msg.user .bubble { background: #e8f0ff; border: 1px solid #d5e2ff; }
+      .msg.assistant .bubble { background: #ffffff; border: 1px solid #e6e6e6; }
+      .meta { font-size: 12px; color: #777; margin-top: 2px; }
+    </style>
+  </head>
+  <body>
+    <h2>Profile Intelligence Engine — Demo</h2>
+    <p class="muted">
+      This page calls the backend API at <code>/api/v1/profile-engine</code> (same origin).
+      If you are running a separate frontend on another port, use CORS and call the backend base URL directly.
+    </p>
+
+    <div class="row">
+      <div class="card">
+        <h3>1) Start session</h3>
+        <label class="muted">Optional user_id</label>
+        <input id="userId" type="text" placeholder="e.g. vibhu_001" />
+        <div style="margin-top: 10px;">
+          <button id="startBtn">Start</button>
+          <span id="sessionInfo" class="muted"></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>2) Submit business input</h3>
+        <textarea id="rawInput" placeholder="Describe the business..."></textarea>
+        <div style="margin-top: 10px;">
+          <button id="submitInputBtn" disabled>Submit input</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Conversation (chat thread)</h3>
+        <div class="muted">
+          This is rendered from <code>GET /sessions/{session_id}/messages</code>.
+        </div>
+        <div style="margin-top: 10px;">
+          <button id="refreshChatBtn" disabled>Refresh messages</button>
+        </div>
+        <div id="chatBox" class="chat" style="margin-top: 10px;">
+          <div class="muted">No messages yet.</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>3) Follow-up question</h3>
+        <div id="questionBox" class="muted">No question yet.</div>
+        <div id="stageWrap" style="display:none; margin-top: 10px;">
+          <label class="muted">Stage</label>
+          <select id="stageSelect" style="width:100%; padding:10px; font-size:14px;">
+            <option value="idea_stage">idea_stage</option>
+            <option value="mvp">mvp</option>
+            <option value="early_traction">early_traction</option>
+            <option value="scaling">scaling</option>
+            <option value="mature">mature</option>
+            <option value="not_sure">not_sure</option>
+          </select>
+        </div>
+
+        <div id="goalsWrap" style="display:none; margin-top: 10px;">
+          <div class="muted">Goals (multi-select)</div>
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px;">
+            <label><input type="checkbox" value="brand_awareness" class="goalCb" /> brand_awareness</label>
+            <label><input type="checkbox" value="lead_generation" class="goalCb" /> lead_generation</label>
+            <label><input type="checkbox" value="customer_retention" class="goalCb" /> customer_retention</label>
+            <label><input type="checkbox" value="revenue_growth" class="goalCb" /> revenue_growth</label>
+            <label><input type="checkbox" value="product_launch" class="goalCb" /> product_launch</label>
+            <label><input type="checkbox" value="market_expansion" class="goalCb" /> market_expansion</label>
+            <label><input type="checkbox" value="other" class="goalCb" /> other</label>
+          </div>
+        </div>
+
+        <textarea id="answerText" placeholder="Type your answer..." style="margin-top:10px;"></textarea>
+        <div style="margin-top: 10px;">
+          <button id="answerBtn" disabled>Submit answer</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>4) Get final profile</h3>
+        <div style="margin-top: 10px;">
+          <button id="startResearchBtn" disabled>Start research (finalize)</button>
+          <button id="answerMoreBtn" disabled style="margin-left:8px;">Answer more</button>
+          <button id="getProfileBtn" disabled>Fetch profile</button>
+        </div>
+        <div id="statusLine" class="muted"></div>
+        <pre id="output"></pre>
+      </div>
+    </div>
+
+    <script>
+      const apiBase = "/api/v1/profile-engine";
+
+      let sessionId = null;
+      let currentQuestion = null;
+
+      const el = (id) => document.getElementById(id);
+      const output = el("output");
+      const statusLine = el("statusLine");
+      const sessionInfo = el("sessionInfo");
+      const stageWrap = el("stageWrap");
+      const goalsWrap = el("goalsWrap");
+      const stageSelect = el("stageSelect");
+      const chatBox = el("chatBox");
+
+      function setStatus(msg, kind) {
+        statusLine.textContent = msg || "";
+        statusLine.className = kind === "error" ? "error" : (kind === "success" ? "success" : "muted");
+      }
+
+      function show(obj) {
+        output.textContent = JSON.stringify(obj, null, 2);
+      }
+
+      async function request(path, options) {
+        const res = await fetch(`${apiBase}${path}`, {
+          headers: { "Content-Type": "application/json" },
+          ...options,
+        });
+        const text = await res.text();
+        let json = null;
+        try { json = text ? JSON.parse(text) : null; } catch { json = { raw: text }; }
+        if (!res.ok) {
+          const detail = (json && (json.detail || json.error)) ? (json.detail || json.error) : res.statusText;
+          throw new Error(`${res.status} ${detail}`);
+        }
+        return json;
+      }
+
+      function enableFlow() {
+        el("submitInputBtn").disabled = !sessionId;
+        el("getProfileBtn").disabled = !sessionId;
+        el("refreshChatBtn").disabled = !sessionId;
+      }
+
+      function escapeHtml(s) {
+        return String(s)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
+
+      function renderMessages(msgs) {
+        if (!msgs || msgs.length === 0) {
+          chatBox.innerHTML = `<div class="muted">No messages yet.</div>`;
+          return;
+        }
+        chatBox.innerHTML = msgs.map((m) => {
+          const role = (m.role || "assistant") === "user" ? "user" : "assistant";
+          const key = m.key ? ` <span class="muted">(${escapeHtml(m.key)})</span>` : "";
+          const meta = m.created_at ? `<div class="meta">${escapeHtml(m.created_at)}${key}</div>` : (key ? `<div class="meta">${key}</div>` : "");
+          return `<div class="msg ${role}"><div><div class="bubble">${escapeHtml(m.content || "")}</div>${meta}</div></div>`;
+        }).join("");
+        chatBox.scrollTop = chatBox.scrollHeight;
+      }
+
+      async function refreshChat() {
+        if (!sessionId) return;
+        try {
+          const data = await request(`/sessions/${sessionId}/messages`, { method: "GET" });
+          renderMessages(data.messages || []);
+        } catch {
+          // Chat is best-effort; don't overwrite primary UI on failure.
+        }
+      }
+
+      function setQuestionUI(q) {
+        currentQuestion = q || null;
+        el("questionBox").textContent = currentQuestion ? `${currentQuestion.text} (${currentQuestion.question_type})` : "No question.";
+
+        // toggle input widgets
+        stageWrap.style.display = (currentQuestion && currentQuestion.key === "declared_stage") ? "block" : "none";
+        goalsWrap.style.display = (currentQuestion && currentQuestion.key === "declared_goals") ? "block" : "none";
+        el("answerText").style.display = (currentQuestion && (currentQuestion.key === "declared_stage" || currentQuestion.key === "declared_goals")) ? "none" : "block";
+
+        el("answerBtn").disabled = !currentQuestion;
+      }
+
+      function selectedGoals() {
+        return Array.from(document.querySelectorAll(".goalCb"))
+          .filter((cb) => cb.checked)
+          .map((cb) => cb.value);
+      }
+
+      el("startBtn").addEventListener("click", async () => {
+        try {
+          setStatus("");
+          show({});
+          const user_id = el("userId").value.trim() || null;
+          const body = user_id ? { user_id } : {};
+          const data = await request("/sessions", { method: "POST", body: JSON.stringify(body) });
+          sessionId = data.session_id;
+          sessionInfo.textContent = `session_id: ${sessionId}`;
+          enableFlow();
+          el("startResearchBtn").disabled = true;
+          el("answerMoreBtn").disabled = true;
+          setStatus("Session started.", "success");
+          show(data);
+          await refreshChat();
+        } catch (e) {
+          setStatus(String(e.message || e), "error");
+        }
+      });
+
+      el("submitInputBtn").addEventListener("click", async () => {
+        try {
+          setStatus("");
+          const raw_input = el("rawInput").value.trim();
+          const data = await request(`/sessions/${sessionId}/input`, { method: "POST", body: JSON.stringify({ raw_input }) });
+          setQuestionUI(data.next_question || null);
+          el("startResearchBtn").disabled = true;
+          el("answerMoreBtn").disabled = true;
+          setStatus(data.message || "Input processed.", "success");
+          show(data);
+          await refreshChat();
+        } catch (e) {
+          setStatus(String(e.message || e), "error");
+        }
+      });
+
+      el("answerBtn").addEventListener("click", async () => {
+        try {
+          setStatus("");
+          let answer = el("answerText").value.trim();
+          if (currentQuestion.key === "declared_stage") {
+            answer = stageSelect.value;
+          }
+          if (currentQuestion.key === "declared_goals") {
+            answer = selectedGoals();
+          }
+          const data = await request(`/sessions/${sessionId}/answers`, {
+            method: "POST",
+            body: JSON.stringify({ question_key: currentQuestion.key, answer }),
+          });
+          setQuestionUI(data.next_question || null);
+          if (data.profile_ready) {
+            el("startResearchBtn").disabled = false;
+            el("answerMoreBtn").disabled = false;
+          }
+          setStatus(data.message || "Answer processed.", "success");
+          show(data);
+          await refreshChat();
+        } catch (e) {
+          setStatus(String(e.message || e), "error");
+        }
+      });
+
+      el("answerMoreBtn").addEventListener("click", async () => {
+        try {
+          setStatus("");
+          const data = await request(`/sessions/${sessionId}/answer-more`, { method: "POST" });
+          setQuestionUI(data.next_question || null);
+          el("startResearchBtn").disabled = false; // user can still finalize anytime
+          setStatus(data.message || "Optional enabled.", "success");
+          show(data);
+          await refreshChat();
+        } catch (e) {
+          setStatus(String(e.message || e), "error");
+        }
+      });
+
+      el("startResearchBtn").addEventListener("click", async () => {
+        try {
+          setStatus("");
+          const data = await request(`/sessions/${sessionId}/start-research`, { method: "POST" });
+          el("getProfileBtn").disabled = false;
+          setStatus(data.message || "Profile generated.", "success");
+          show(data);
+          await refreshChat();
+        } catch (e) {
+          setStatus(String(e.message || e), "error");
+        }
+      });
+
+      el("getProfileBtn").addEventListener("click", async () => {
+        try {
+          setStatus("");
+          const data = await request(`/sessions/${sessionId}/profile`, { method: "GET" });
+          setStatus(data.message || "Profile fetched.", "success");
+          show(data);
+          await refreshChat();
+        } catch (e) {
+          setStatus(String(e.message || e), "error");
+        }
+      });
+
+      el("refreshChatBtn").addEventListener("click", async () => {
+        await refreshChat();
+      });
+    </script>
+  </body>
+</html>

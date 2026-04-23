@@ -1,0 +1,3 @@
+# Root-level caches and logs (backend uses digital-marketing-ai/backend/.gitignore)
+.pytest_cache/
+debug-*.log
