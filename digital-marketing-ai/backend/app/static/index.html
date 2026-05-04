@@ -1,315 +1,2377 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Profile Engine Demo</title>
-    <style>
-      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; max-width: 900px; margin: 24px auto; padding: 0 16px; }
-      textarea { width: 100%; min-height: 120px; padding: 10px; font-size: 14px; }
-      input[type="text"] { width: 100%; padding: 10px; font-size: 14px; }
-      button { padding: 10px 14px; font-size: 14px; cursor: pointer; }
-      .row { display: grid; grid-template-columns: 1fr; gap: 12px; }
-      .card { border: 1px solid #ddd; border-radius: 10px; padding: 14px; }
-      .muted { color: #666; font-size: 13px; }
-      pre { white-space: pre-wrap; word-break: break-word; background: #f7f7f7; padding: 12px; border-radius: 10px; overflow: auto; }
-      .error { color: #b00020; }
-      .success { color: #0a7a0a; }
-      .chat { background: #fafafa; border: 1px solid #eee; border-radius: 10px; padding: 10px; min-height: 120px; }
-      .msg { display: flex; margin: 8px 0; }
-      .msg.user { justify-content: flex-end; }
-      .bubble { max-width: 80%; padding: 10px 12px; border-radius: 12px; line-height: 1.35; white-space: pre-wrap; word-break: break-word; }
-      .msg.user .bubble { background: #e8f0ff; border: 1px solid #d5e2ff; }
-      .msg.assistant .bubble { background: #ffffff; border: 1px solid #e6e6e6; }
-      .meta { font-size: 12px; color: #777; margin-top: 2px; }
-    </style>
-  </head>
-  <body>
-    <h2>Profile Intelligence Engine — Demo</h2>
-    <p class="muted">
-      This page calls the backend API at <code>/api/v1/profile-engine</code> (same origin).
-      If you are running a separate frontend on another port, use CORS and call the backend base URL directly.
-    </p>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BizMentor AI — Business Operating System v3.0</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --gold: #C9A84C;
+  --gold-light: #E8C97A;
+  --gold-dim: #7A5E28;
+  --bg-void: #0A0A0B;
+  --bg-deep: #111113;
+  --bg-panel: #17171A;
+  --bg-surface: #1E1E22;
+  --bg-hover: #252529;
+  --border: rgba(201,168,76,0.15);
+  --border-soft: rgba(255,255,255,0.06);
+  --text-primary: #F0EDE6;
+  --text-secondary: #9B9489;
+  --text-muted: #524E47;
+  --green-go: #4ADE80;
+  --red-stop: #F87171;
+  --amber-warn: #FBBF24;
+  --blue-info: #60A5FA;
+  --radius: 12px;
+  --radius-lg: 18px;
+  --radius-xl: 24px;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; background: var(--bg-void); color: var(--text-primary); font-family: 'DM Sans', sans-serif; overflow: hidden; -webkit-background-clip: border-box; -moz-background-clip: border-box; background-clip: border-box; }
 
-    <div class="row">
-      <div class="card">
-        <h3>1) Start session</h3>
-        <label class="muted">Optional user_id</label>
-        <input id="userId" type="text" placeholder="e.g. vibhu_001" />
-        <div style="margin-top: 10px;">
-          <button id="startBtn">Start</button>
-          <span id="sessionInfo" class="muted"></span>
-        </div>
-      </div>
+/* ─── LAYOUT ─── */
+.app { display: flex; height: 100vh; position: relative; }
 
-      <div class="card">
-        <h3>2) Submit business input</h3>
-        <textarea id="rawInput" placeholder="Describe the business..."></textarea>
-        <div style="margin-top: 10px;">
-          <button id="submitInputBtn" disabled>Submit input</button>
-        </div>
-      </div>
+/* ─── SIDEBAR ─── */
+.sidebar {
+  width: 260px; min-width: 260px; background: var(--bg-deep);
+  border-right: 1px solid var(--border-soft);
+  display: flex; flex-direction: column; gap: 0; overflow: hidden;
+  transition: width 0.3s ease;
+}
+.sidebar-logo {
+  padding: 20px 20px 16px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.logo-mark {
+  display: flex; align-items: center; gap: 10px;
+}
+.logo-icon {
+  width: 34px; height: 34px; border-radius: 8px;
+  background: linear-gradient(135deg, var(--gold-dim), var(--gold));
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Syne', sans-serif; font-weight: 800; font-size: 14px;
+  color: var(--bg-void); flex-shrink: 0;
+}
+.logo-text { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 13px; color: var(--text-primary); }
+.logo-sub { font-size: 10px; color: var(--gold); letter-spacing: 0.08em; text-transform: uppercase; margin-top: 1px; }
 
-      <div class="card">
-        <h3>Conversation (chat thread)</h3>
-        <div class="muted">
-          This is rendered from <code>GET /sessions/{session_id}/messages</code>.
-        </div>
-        <div style="margin-top: 10px;">
-          <button id="refreshChatBtn" disabled>Refresh messages</button>
-        </div>
-        <div id="chatBox" class="chat" style="margin-top: 10px;">
-          <div class="muted">No messages yet.</div>
-        </div>
-      </div>
+.sidebar-section { padding: 16px 12px 8px; }
+.sidebar-label { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted); padding: 0 8px 8px; font-weight: 500; }
 
-      <div class="card">
-        <h3>3) Follow-up question</h3>
-        <div id="questionBox" class="muted">No question yet.</div>
-        <div id="stageWrap" style="display:none; margin-top: 10px;">
-          <label class="muted">Stage</label>
-          <select id="stageSelect" style="width:100%; padding:10px; font-size:14px;">
-            <option value="idea_stage">idea_stage</option>
-            <option value="mvp">mvp</option>
-            <option value="early_traction">early_traction</option>
-            <option value="scaling">scaling</option>
-            <option value="mature">mature</option>
-            <option value="not_sure">not_sure</option>
-          </select>
-        </div>
+.module-item {
+  display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+  border-radius: 8px; cursor: default; margin-bottom: 2px;
+  transition: background 0.15s;
+}
+.module-item.active { background: rgba(201,168,76,0.1); }
+.module-item.done .mod-dot { background: var(--green-go); box-shadow: 0 0 6px rgba(74,222,128,0.4); }
+.module-item.active .mod-dot { background: var(--gold); box-shadow: 0 0 8px rgba(201,168,76,0.5); animation: pulse 2s infinite; }
+.module-item.pending .mod-dot { background: var(--text-muted); }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+.mod-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.mod-name { font-size: 12px; color: var(--text-secondary); }
+.module-item.active .mod-name { color: var(--gold-light); }
+.module-item.done .mod-name { color: var(--text-primary); }
 
-        <div id="goalsWrap" style="display:none; margin-top: 10px;">
-          <div class="muted">Goals (multi-select)</div>
-          <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px;">
-            <label><input type="checkbox" value="brand_awareness" class="goalCb" /> brand_awareness</label>
-            <label><input type="checkbox" value="lead_generation" class="goalCb" /> lead_generation</label>
-            <label><input type="checkbox" value="customer_retention" class="goalCb" /> customer_retention</label>
-            <label><input type="checkbox" value="revenue_growth" class="goalCb" /> revenue_growth</label>
-            <label><input type="checkbox" value="product_launch" class="goalCb" /> product_launch</label>
-            <label><input type="checkbox" value="market_expansion" class="goalCb" /> market_expansion</label>
-            <label><input type="checkbox" value="other" class="goalCb" /> other</label>
-          </div>
-        </div>
+.sidebar-divider { height: 1px; background: var(--border-soft); margin: 8px 12px; }
 
-        <textarea id="answerText" placeholder="Type your answer..." style="margin-top:10px;"></textarea>
-        <div style="margin-top: 10px;">
-          <button id="answerBtn" disabled>Submit answer</button>
-        </div>
-      </div>
+.info-card {
+  margin: 12px; padding: 12px; border-radius: var(--radius);
+  background: rgba(201,168,76,0.05); border: 1px solid var(--border);
+}
+.info-card-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--gold-dim); margin-bottom: 4px; }
+.info-card-val { font-size: 12px; color: var(--text-secondary); }
 
-      <div class="card">
-        <h3>4) Get final profile</h3>
-        <div style="margin-top: 10px;">
-          <button id="startResearchBtn" disabled>Start research (finalize)</button>
-          <button id="answerMoreBtn" disabled style="margin-left:8px;">Answer more</button>
-          <button id="getProfileBtn" disabled>Fetch profile</button>
+.sidebar-bottom { margin-top: auto; padding: 12px; }
+.reset-btn {
+  width: 100%; padding: 8px 12px; border-radius: 8px;
+  background: transparent; border: 1px solid var(--border-soft);
+  color: var(--text-muted); font-size: 12px; cursor: pointer;
+  transition: all 0.2s; font-family: 'DM Sans', sans-serif;
+}
+.reset-btn:hover { border-color: var(--border); color: var(--text-secondary); background: var(--bg-hover); }
+
+/* ─── MAIN AREA ─── */
+.main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+/* ─── HEADER ─── */
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 24px; border-bottom: 1px solid var(--border-soft);
+  background: var(--bg-deep); flex-shrink: 0;
+}
+.topbar-center { display: flex; align-items: center; gap: 8px; }
+.mode-badge {
+  padding: 4px 10px; border-radius: 20px; font-size: 11px;
+  background: rgba(201,168,76,0.12); border: 1px solid var(--border);
+  color: var(--gold); font-weight: 500; display: none;
+}
+.mode-badge.visible { display: inline-flex; align-items: center; gap: 5px; }
+.mode-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--gold); animation: pulse 2s infinite; }
+.stage-badge {
+  padding: 4px 10px; border-radius: 20px; font-size: 11px;
+  background: rgba(96,165,250,0.1); border: 1px solid rgba(96,165,250,0.2);
+  color: var(--blue-info); display: none;
+}
+.stage-badge.visible { display: inline-flex; }
+.model-pill {
+  font-size: 11px; color: var(--text-muted);
+  padding: 3px 8px; border-radius: 6px; background: var(--bg-surface);
+  font-family: 'DM Mono', monospace;
+}
+
+/* ─── WELCOME SCREEN ─── */
+.welcome-screen {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  flex-direction: column; gap: 0; padding: 40px;
+  background: radial-gradient(ellipse at 50% 0%, rgba(201,168,76,0.04) 0%, transparent 65%);
+}
+.welcome-screen.hidden { display: none; }
+.welcome-orb {
+  width: 80px; height: 80px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, var(--gold-light), var(--gold-dim));
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Syne', sans-serif; font-weight: 800; font-size: 28px;
+  color: var(--bg-void); margin-bottom: 24px;
+  box-shadow: 0 0 40px rgba(201,168,76,0.2), 0 0 80px rgba(201,168,76,0.08);
+  animation: float 4s ease-in-out infinite;
+}
+@keyframes float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+.welcome-title {
+  font-family: 'Syne', sans-serif; font-size: 32px; font-weight: 800;
+  letter-spacing: -0.02em; text-align: center; margin-bottom: 8px;
+  background: linear-gradient(135deg, var(--text-primary) 40%, var(--gold));
+  -webkit-background-clip: text; -moz-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.welcome-sub { font-size: 15px; color: var(--text-secondary); text-align: center; max-width: 420px; line-height: 1.6; margin-bottom: 40px; }
+
+.entry-cards { display: flex; gap: 16px; }
+.entry-card {
+  width: 200px; padding: 24px 20px; border-radius: var(--radius-lg);
+  background: var(--bg-panel); border: 1px solid var(--border-soft);
+  cursor: pointer; transition: all 0.25s; text-align: center;
+  position: relative; overflow: hidden;
+}
+.entry-card::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, transparent, var(--gold), transparent);
+  opacity: 0; transition: opacity 0.25s;
+}
+.entry-card:hover { border-color: var(--border); background: var(--bg-surface); transform: translateY(-3px); box-shadow: 0 12px 30px rgba(0,0,0,0.3); }
+.entry-card:hover::before { opacity: 1; }
+.entry-icon { font-size: 28px; margin-bottom: 14px; }
+.entry-title { font-family: 'Syne', sans-serif; font-size: 15px; font-weight: 700; color: var(--text-primary); margin-bottom: 6px; }
+.entry-desc { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+
+.entry-card.idea-card:hover .entry-icon { animation: wobble 0.5s; }
+@keyframes wobble { 0%,100% { transform: rotate(0); } 25% { transform: rotate(-8deg); } 75% { transform: rotate(8deg); } }
+
+.welcome-tagline {
+  margin-top: 40px; font-size: 11px; color: var(--text-muted);
+  letter-spacing: 0.06em; text-transform: uppercase;
+  display: flex; align-items: center; gap: 10px;
+}
+.welcome-tagline::before, .welcome-tagline::after {
+  content: ''; flex: 1; height: 1px; background: var(--border-soft); width: 60px;
+}
+
+.planner-screen {
+  flex: 1;
+  overflow-y: auto;
+  padding: 32px 24px 40px;
+  display: none;
+  background:
+    radial-gradient(circle at top right, rgba(201,168,76,0.08), transparent 32%),
+    linear-gradient(180deg, rgba(255,255,255,0.01), transparent 30%);
+}
+.planner-screen.active { display: block; }
+.planner-wrap { max-width: 900px; margin: 0 auto; }
+.planner-hero {
+  margin-bottom: 22px;
+  padding: 24px;
+  border-radius: var(--radius-xl);
+  background: linear-gradient(135deg, rgba(201,168,76,0.12), rgba(201,168,76,0.03));
+  border: 1px solid var(--border);
+}
+.planner-kicker {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--gold);
+  margin-bottom: 10px;
+}
+.planner-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 28px;
+  line-height: 1.15;
+  margin-bottom: 8px;
+}
+.planner-sub {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+  max-width: 700px;
+}
+.planner-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 16px;
+}
+.planner-card {
+  grid-column: span 12;
+  padding: 20px;
+  border-radius: var(--radius-lg);
+  background: var(--bg-panel);
+  border: 1px solid var(--border-soft);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.18);
+}
+.planner-card.half { grid-column: span 6; }
+.planner-label {
+  font-family: 'Syne', sans-serif;
+  font-size: 16px;
+  margin-bottom: 6px;
+  color: var(--text-primary);
+}
+.planner-help {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.6;
+  margin-bottom: 14px;
+}
+.choice-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+.choice-card {
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-surface);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.choice-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--border);
+}
+.choice-card.selected {
+  border-color: var(--gold);
+  background: rgba(201,168,76,0.12);
+  box-shadow: 0 0 0 1px rgba(201,168,76,0.2);
+}
+.choice-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+.choice-desc {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.chip-check {
+  position: relative;
+}
+.chip-check input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+.chip-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.chip-check input:checked + .chip-pill {
+  border-color: var(--gold);
+  background: rgba(201,168,76,0.12);
+  color: var(--text-primary);
+}
+.planner-input,
+.planner-textarea {
+  width: 100%;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border-soft);
+  border-radius: 14px;
+  padding: 14px 15px;
+  font-size: 14px;
+  font-family: 'DM Sans', sans-serif;
+  outline: none;
+}
+.planner-input:focus,
+.planner-textarea:focus {
+  border-color: var(--border);
+  box-shadow: 0 0 0 3px rgba(201,168,76,0.06);
+}
+.planner-textarea {
+  min-height: 110px;
+  resize: vertical;
+  line-height: 1.6;
+}
+.planner-actions {
+  margin-top: 22px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.research-btn {
+  border: none;
+  cursor: pointer;
+  border-radius: 16px;
+  padding: 14px 20px;
+  background: linear-gradient(135deg, var(--gold), var(--gold-light));
+  color: var(--bg-void);
+  font-family: 'Syne', sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+  box-shadow: 0 12px 28px rgba(201,168,76,0.22);
+}
+.research-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 30px rgba(201,168,76,0.28);
+}
+.research-btn:disabled {
+  cursor: not-allowed;
+  transform: none;
+  opacity: 0.55;
+  box-shadow: none;
+}
+.research-btn.topbar-btn {
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 12px;
+  box-shadow: none;
+  display: none;
+}
+.research-btn.topbar-btn.visible {
+  display: inline-flex;
+  align-items: center;
+}
+.planner-note {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.planner-error {
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--red-stop);
+  display: none;
+}
+.planner-error.show { display: block; }
+
+@media (max-width: 860px) {
+  .planner-card.half { grid-column: span 12; }
+}
+
+/* ─── CHAT AREA ─── */
+.chat-area { flex: 1; overflow-y: auto; padding: 24px 0; scroll-behavior: smooth; display: none; }
+.chat-area.active { display: block; }
+.chat-area::-webkit-scrollbar { width: 4px; }
+.chat-area::-webkit-scrollbar-track { background: transparent; }
+.chat-area::-webkit-scrollbar-thumb { background: var(--border-soft); border-radius: 2px; }
+
+.message-wrap { max-width: 780px; margin: 0 auto; padding: 0 24px; }
+
+.message { display: flex; gap: 14px; margin-bottom: 24px; animation: msgIn 0.3s ease; }
+@keyframes msgIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+.msg-avatar {
+  width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 600; margin-top: 2px;
+}
+.msg-avatar.ai { background: linear-gradient(135deg, var(--gold-dim), var(--gold)); color: var(--bg-void); font-family: 'Syne', sans-serif; }
+.msg-avatar.user { background: var(--bg-surface); border: 1px solid var(--border-soft); color: var(--text-secondary); }
+
+.msg-body { flex: 1; min-width: 0; }
+.msg-sender { font-size: 12px; color: var(--text-muted); margin-bottom: 5px; font-weight: 500; }
+.msg-content {
+  font-size: 14px; line-height: 1.75; color: var(--text-primary);
+}
+.msg-content:not(.user) {
+  padding: 2px 0 0;
+}
+.msg-content.user {
+  background: var(--bg-surface); border: 1px solid var(--border-soft);
+  padding: 12px 16px; border-radius: var(--radius); display: inline-block;
+  max-width: 85%;
+}
+.msg-content p { margin-bottom: 12px; }
+.msg-content p:last-child { margin-bottom: 0; }
+.msg-content strong { color: var(--gold-light); font-weight: 500; }
+.msg-content em { color: var(--text-secondary); }
+.msg-content ul, .msg-content ol { padding-left: 20px; margin: 10px 0; }
+.msg-content li { margin-bottom: 6px; }
+.msg-content code { font-family: 'DM Mono', monospace; font-size: 12px; background: var(--bg-surface); padding: 2px 6px; border-radius: 4px; color: var(--gold); }
+.msg-content pre { background: var(--bg-panel); border: 1px solid var(--border-soft); border-radius: 10px; padding: 14px; margin: 10px 0; overflow-x: auto; }
+.msg-content pre code { background: none; padding: 0; color: var(--text-secondary); font-size: 13px; }
+.msg-content blockquote {
+  border-left: 3px solid var(--gold); padding: 10px 14px;
+  background: rgba(201,168,76,0.05); border-radius: 0 8px 8px 0;
+  margin: 10px 0; color: var(--text-secondary);
+}
+.msg-content h3 { font-family: 'Syne', sans-serif; font-size: 15px; color: var(--gold-light); margin: 0 0 10px; font-weight: 600; }
+.msg-content h4 { font-size: 13px; color: var(--text-secondary); margin: 12px 0 6px; font-weight: 500; letter-spacing: 0.05em; text-transform: uppercase; }
+.msg-question-line {
+  margin: 10px 0 0;
+  color: #f3d27a;
+  font-weight: 700;
+  line-height: 1.6;
+}
+.msg-question-label {
+  color: var(--gold);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-right: 6px;
+}
+
+.assistant-choice-group {
+  margin-top: 16px;
+  display: grid;
+  gap: 10px;
+}
+.assistant-choice-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.assistant-choice-btn {
+  width: 100%;
+  text-align: left;
+  padding: 14px 15px;
+  border-radius: 14px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: 'DM Sans', sans-serif;
+}
+.assistant-choice-btn:hover {
+  transform: translateY(-1px);
+  border-color: var(--border);
+  background: var(--bg-hover);
+}
+.assistant-choice-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+  transform: none;
+}
+.assistant-choice-btn.recommended {
+  border-color: rgba(201,168,76,0.55);
+  background: linear-gradient(135deg, rgba(201,168,76,0.16), rgba(201,168,76,0.06));
+  box-shadow: 0 0 0 1px rgba(201,168,76,0.18);
+}
+.assistant-choice-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.assistant-choice-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.assistant-choice-badge {
+  flex-shrink: 0;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--bg-void);
+  background: linear-gradient(135deg, var(--gold), var(--gold-light));
+}
+.assistant-choice-desc {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+/* Quick Choice Buttons */
+.quick-choices { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.qchoice {
+  padding: 8px 16px; border-radius: 20px; font-size: 13px;
+  background: transparent; border: 1px solid var(--border);
+  color: var(--gold); cursor: pointer; transition: all 0.2s;
+  font-family: 'DM Sans', sans-serif;
+}
+.qchoice:hover { background: rgba(201,168,76,0.1); border-color: var(--gold); transform: translateY(-1px); }
+
+/* Report Mode Buttons */
+.report-modes { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+.rmode {
+  padding: 12px 16px; border-radius: 10px; font-size: 13px;
+  background: var(--bg-panel); border: 1px solid var(--border-soft);
+  color: var(--text-secondary); cursor: pointer; transition: all 0.2s;
+  text-align: left; font-family: 'DM Sans', sans-serif;
+  display: flex; align-items: center; gap: 12px;
+}
+.rmode:hover { background: var(--bg-surface); border-color: var(--border); color: var(--text-primary); }
+.rmode-num { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--gold); width: 18px; flex-shrink: 0; }
+.rmode-label { font-weight: 500; color: var(--text-primary); font-size: 13px; }
+.rmode-desc { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+/* Typing indicator */
+.typing-msg .msg-content { color: var(--text-muted); display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.typing-dots { display: flex; gap: 4px; }
+.typing-dots span { width: 5px; height: 5px; border-radius: 50%; background: var(--gold-dim); animation: dot 1.4s infinite; }
+.typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+.typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes dot { 0%,80%,100% { transform: scale(0.6); opacity: 0.4; } 40% { transform: scale(1); opacity: 1; } }
+
+/* ─── INPUT AREA ─── */
+.input-zone {
+  flex-shrink: 0; padding: 16px 24px 20px;
+  background: var(--bg-deep); border-top: 1px solid var(--border-soft);
+}
+.input-wrap {
+  max-width: 780px; margin: 0 auto; position: relative;
+}
+.input-box {
+  display: flex; align-items: flex-end; gap: 0;
+  background: var(--bg-panel); border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg); transition: border-color 0.2s;
+  overflow: hidden;
+}
+.input-box:focus-within { border-color: var(--border); box-shadow: 0 0 0 3px rgba(201,168,76,0.06); }
+.chat-input {
+  flex: 1; background: transparent; border: none; outline: none;
+  color: var(--text-primary); font-size: 14px; font-family: 'DM Sans', sans-serif;
+  padding: 14px 16px; resize: none; max-height: 140px; line-height: 1.5;
+}
+.chat-input::placeholder { color: var(--text-muted); }
+.send-btn {
+  width: 42px; height: 42px; border-radius: 10px; margin: 5px 6px;
+  background: var(--gold); border: none; cursor: pointer; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center; transition: all 0.15s;
+}
+.send-btn:hover { background: var(--gold-light); transform: scale(1.05); }
+.send-btn:active { transform: scale(0.95); }
+.send-btn:disabled { background: var(--text-muted); cursor: not-allowed; transform: none; }
+.send-btn svg { width: 16px; height: 16px; fill: var(--bg-void); }
+
+.input-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; padding: 0 2px; }
+.input-hint { font-size: 11px; color: var(--text-muted); }
+.char-count { font-size: 11px; color: var(--text-muted); font-family: 'DM Mono', monospace; }
+
+/* ─── SCROLL TO BOTTOM ─── */
+.scroll-btn {
+  position: fixed; bottom: 90px; right: 30px; width: 36px; height: 36px;
+  background: var(--bg-panel); border: 1px solid var(--border-soft);
+  border-radius: 50%; display: none; align-items: center; justify-content: center;
+  cursor: pointer; color: var(--text-secondary); transition: all 0.2s; z-index: 100;
+}
+.scroll-btn.show { display: flex; }
+.scroll-btn:hover { border-color: var(--border); color: var(--text-primary); }
+
+/* ─── TOAST ─── */
+.toast {
+  position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%);
+  background: var(--bg-panel); border: 1px solid var(--border);
+  color: var(--gold); padding: 10px 18px; border-radius: 20px;
+  font-size: 13px; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 200;
+}
+.toast.show { opacity: 1; }
+
+/* ─── VERDICT BADGES ─── */
+.verdict { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; margin: 6px 0; }
+.verdict.go { background: rgba(74,222,128,0.1); border: 1px solid rgba(74,222,128,0.3); color: var(--green-go); }
+.verdict.caution { background: rgba(251,191,36,0.1); border: 1px solid rgba(251,191,36,0.3); color: var(--amber-warn); }
+.verdict.pivot { background: rgba(96,165,250,0.1); border: 1px solid rgba(96,165,250,0.3); color: var(--blue-info); }
+.verdict.stop { background: rgba(248,113,113,0.1); border: 1px solid rgba(248,113,113,0.3); color: var(--red-stop); }
+
+/* progress bar */
+.progress-bar-wrap { height: 2px; background: var(--border-soft); position: relative; overflow: hidden; }
+.progress-bar { height: 100%; background: linear-gradient(90deg, var(--gold-dim), var(--gold)); width: 0; transition: width 0.5s ease; }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <!-- ─── SIDEBAR ─── -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-mark">
+        <div class="logo-icon">BM</div>
+        <div>
+          <div class="logo-text">BizMentor AI</div>
+          <div class="logo-sub">v3.0 · Operating System</div>
         </div>
-        <div id="statusLine" class="muted"></div>
-        <pre id="output"></pre>
       </div>
     </div>
 
-    <script>
-      const apiBase = "/api/v1/profile-engine";
+    <div class="sidebar-section">
+      <div class="sidebar-label">Session Progress</div>
+      <div class="module-item done" id="mod-entry">
+        <div class="mod-dot"></div>
+        <div class="mod-name">Entry & Stage</div>
+      </div>
+      <div class="module-item pending" id="mod-mode">
+        <div class="mod-dot"></div>
+        <div class="mod-name">Report Mode</div>
+      </div>
+      <div class="module-item pending" id="mod-intake">
+        <div class="mod-dot"></div>
+        <div class="mod-name">Business Intake</div>
+      </div>
+      <div class="module-item pending" id="mod-validation">
+        <div class="mod-dot"></div>
+        <div class="mod-name">Validation Engine</div>
+      </div>
+      <div class="module-item pending" id="mod-market">
+        <div class="mod-dot"></div>
+        <div class="mod-name">Market Analysis</div>
+      </div>
+      <div class="module-item pending" id="mod-financial">
+        <div class="mod-dot"></div>
+        <div class="mod-name">Financial Model</div>
+      </div>
+      <div class="module-item pending" id="mod-strategy">
+        <div class="mod-dot"></div>
+        <div class="mod-name">Go-to-Market</div>
+      </div>
+      <div class="module-item pending" id="mod-report">
+        <div class="mod-dot"></div>
+        <div class="mod-name">Final Report</div>
+      </div>
+    </div>
 
-      let sessionId = null;
-      let currentQuestion = null;
+    <div class="sidebar-divider"></div>
 
-      const el = (id) => document.getElementById(id);
-      const output = el("output");
-      const statusLine = el("statusLine");
-      const sessionInfo = el("sessionInfo");
-      const stageWrap = el("stageWrap");
-      const goalsWrap = el("goalsWrap");
-      const stageSelect = el("stageSelect");
-      const chatBox = el("chatBox");
+    <div class="sidebar-section" style="padding-top:8px;">
+      <div class="sidebar-label">Profile</div>
+      <div class="info-card">
+        <div class="info-card-label">Stage</div>
+        <div class="info-card-val" id="sb-stage">Not selected</div>
+      </div>
+      <div class="info-card" style="margin-top:8px;">
+        <div class="info-card-label">Report Mode</div>
+        <div class="info-card-val" id="sb-mode">Not selected</div>
+      </div>
+    </div>
 
-      function setStatus(msg, kind) {
-        statusLine.textContent = msg || "";
-        statusLine.className = kind === "error" ? "error" : (kind === "success" ? "success" : "muted");
+    <div class="sidebar-bottom">
+      <button class="reset-btn" onclick="resetSession()">↺ &nbsp; New Session</button>
+    </div>
+  </aside>
+
+  <!-- ─── MAIN ─── -->
+  <div class="main">
+    <div class="progress-bar-wrap"><div class="progress-bar" id="progressBar"></div></div>
+
+    <!-- TOPBAR -->
+    <div class="topbar">
+      <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:600;color:var(--text-secondary);">
+        Business Strategy Session
+      </div>
+      <div class="topbar-center">
+        <div class="mode-badge" id="modeBadge">
+          <span class="mode-dot"></span>
+          <span id="modeBadgeText">Loading…</span>
+        </div>
+        <div class="stage-badge" id="stageBadge"></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <button class="research-btn topbar-btn" id="topResearchBtn" onclick="generateResearch()">Research Report</button>
+        <div class="model-pill">claude-sonnet-4-20250514</div>
+      </div>
+    </div>
+
+    <!-- WELCOME SCREEN -->
+    <div class="welcome-screen" id="welcomeScreen">
+      <div class="welcome-orb">B</div>
+      <div class="welcome-title">BizMentor AI</div>
+      <div class="welcome-sub">World's most advanced Business Operating System. McKinsey strategy meets founder-grade execution — in one conversation.</div>
+
+      <div class="entry-cards">
+        <div class="entry-card idea-card" onclick="startSession('new')">
+          <div class="entry-icon">💡</div>
+          <div class="entry-title">New Idea</div>
+          <div class="entry-desc">Have a business idea you want to validate and launch</div>
+        </div>
+        <div class="entry-card" onclick="startSession('existing')">
+          <div class="entry-icon">🚀</div>
+          <div class="entry-title">Running Business</div>
+          <div class="entry-desc">Already have a business and want to scale or fix it</div>
+        </div>
+      </div>
+
+      <div class="welcome-tagline">Truth · Strategy · Execution</div>
+    </div>
+
+    <div class="planner-screen" id="plannerScreen">
+      <div class="planner-wrap">
+        <div class="planner-hero">
+          <div class="planner-kicker">Research Intake</div>
+          <div class="planner-title" id="plannerTitle">Build your brief before research starts</div>
+          <div class="planner-sub" id="plannerSub">Fill this once. BizMentor AI will use this form data to start a personalized chat and guide the next steps.</div>
+        </div>
+
+        <div class="planner-grid">
+          <div class="planner-card">
+            <div class="planner-label">Pick your report style</div>
+            <div class="planner-help">Choose the depth you want. Research will start only after you click the final button.</div>
+            <div class="choice-grid" id="reportModeGrid">
+              <div class="choice-card" data-report-mode="Quick Scan" onclick="selectPlannerReportMode(this)">
+                <div class="choice-title">Quick Scan</div>
+                <div class="choice-desc">Fast viability check with key risks and next actions.</div>
+              </div>
+              <div class="choice-card" data-report-mode="Standard Plan" onclick="selectPlannerReportMode(this)">
+                <div class="choice-title">Standard Plan</div>
+                <div class="choice-desc">Balanced strategy with market, pricing, and roadmap.</div>
+              </div>
+              <div class="choice-card" data-report-mode="Deep Strategy" onclick="selectPlannerReportMode(this)">
+                <div class="choice-title">Deep Strategy</div>
+                <div class="choice-desc">Detailed business, brand, and financial thinking.</div>
+              </div>
+              <div class="choice-card" data-report-mode="Investor Report" onclick="selectPlannerReportMode(this)">
+                <div class="choice-title">Investor Report</div>
+                <div class="choice-desc">Pitch-ready structure for funding and scale conversations.</div>
+              </div>
+              <div class="choice-card" data-report-mode="Turnaround Audit" onclick="selectPlannerReportMode(this)">
+                <div class="choice-title">Turnaround Audit</div>
+                <div class="choice-desc">For struggling businesses that need diagnosis and recovery.</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="planner-card half">
+            <div class="planner-label" id="ideaQuestionLabel">What are you building?</div>
+            <div class="planner-help" id="ideaQuestionHelp">Write the idea in simple words. Short and clear is perfect.</div>
+            <textarea class="planner-textarea" id="businessIdeaInput" placeholder="Example: I want to launch a skincare brand for working women in India with dermatologist-backed products."></textarea>
+          </div>
+
+          <div class="planner-card half">
+            <div class="planner-label">Who is this for?</div>
+            <div class="planner-help">Mention the ideal customer, buyer type, or audience segment.</div>
+            <textarea class="planner-textarea" id="targetAudienceInput" placeholder="Example: First-time founders, salon owners, college students, parents in tier-2 cities..."></textarea>
+          </div>
+
+          <div class="planner-card half">
+            <div class="planner-label">Choose your current stage</div>
+            <div class="planner-help">This helps the report speak at the right level.</div>
+            <div class="choice-grid" id="stageGrid">
+              <div class="choice-card" data-stage-value="idea stage" onclick="selectPlannerStage(this)">
+                <div class="choice-title">Idea Stage</div>
+                <div class="choice-desc">Still shaping the concept.</div>
+              </div>
+              <div class="choice-card" data-stage-value="mvp" onclick="selectPlannerStage(this)">
+                <div class="choice-title">MVP</div>
+                <div class="choice-desc">Early version is being built or tested.</div>
+              </div>
+              <div class="choice-card" data-stage-value="early traction" onclick="selectPlannerStage(this)">
+                <div class="choice-title">Early Traction</div>
+                <div class="choice-desc">Some customers or sales are already visible.</div>
+              </div>
+              <div class="choice-card" data-stage-value="scaling" onclick="selectPlannerStage(this)">
+                <div class="choice-title">Scaling</div>
+                <div class="choice-desc">Now the goal is growth and systems.</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="planner-card half">
+            <div class="planner-label">Team size</div>
+            <div class="planner-help">Pick the closest match.</div>
+            <div class="choice-grid" id="teamSizeGrid">
+              <div class="choice-card" data-team-size="Solo" onclick="selectPlannerTeamSize(this)">
+                <div class="choice-title">Solo</div>
+                <div class="choice-desc">Just you for now.</div>
+              </div>
+              <div class="choice-card" data-team-size="2-5" onclick="selectPlannerTeamSize(this)">
+                <div class="choice-title">2-5</div>
+                <div class="choice-desc">Small early team.</div>
+              </div>
+              <div class="choice-card" data-team-size="5-15" onclick="selectPlannerTeamSize(this)">
+                <div class="choice-title">5-15</div>
+                <div class="choice-desc">Growing delivery and operations.</div>
+              </div>
+              <div class="choice-card" data-team-size="15+" onclick="selectPlannerTeamSize(this)">
+                <div class="choice-title">15+</div>
+                <div class="choice-desc">More established organisation.</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="planner-card">
+            <div class="planner-label">What do you want from this business?</div>
+            <div class="planner-help">Select one or more goals.</div>
+            <div class="chip-row" id="goalOptions">
+              <label class="chip-check"><input type="checkbox" value="brand awareness"><span class="chip-pill">Brand awareness</span></label>
+              <label class="chip-check"><input type="checkbox" value="lead generation"><span class="chip-pill">Lead generation</span></label>
+              <label class="chip-check"><input type="checkbox" value="customer retention"><span class="chip-pill">Customer retention</span></label>
+              <label class="chip-check"><input type="checkbox" value="revenue growth"><span class="chip-pill">Revenue growth</span></label>
+              <label class="chip-check"><input type="checkbox" value="product launch"><span class="chip-pill">Product launch</span></label>
+              <label class="chip-check"><input type="checkbox" value="market expansion"><span class="chip-pill">Market expansion</span></label>
+            </div>
+          </div>
+
+          <div class="planner-card half">
+            <div class="planner-label">Budget or revenue context</div>
+            <div class="planner-help" id="budgetLabelHelp">Share your startup budget, or your current monthly revenue if the business is already running.</div>
+            <input class="planner-input" id="budgetRevenueInput" placeholder="Example: Startup budget ₹3 lakh, or monthly revenue ₹2 lakh">
+          </div>
+
+          <div class="planner-card half">
+            <div class="planner-label">Location and market</div>
+            <div class="planner-help">City, region, or target geography.</div>
+            <input class="planner-input" id="locationInput" placeholder="Example: Delhi NCR, Mumbai, pan-India, GCC market">
+          </div>
+
+          <div class="planner-card">
+            <div class="planner-label" id="challengeLabel">Anything important BizMentor should know?</div>
+            <div class="planner-help" id="challengeHelp">You can mention your biggest bottleneck, unique edge, inspiration, or what has already been tried.</div>
+            <textarea class="planner-textarea" id="contextInput" placeholder="Example: I already tested this with 20 users. Biggest problem is pricing. I want a plan that is realistic for a small budget."></textarea>
+          </div>
+        </div>
+
+        <div class="planner-actions">
+          <button class="research-btn" id="researchBtn" onclick="startGuidedChat()">Submit & Start Chat</button>
+          <div class="planner-note">Form submit hote hi data current session mein save ho jayega aur AI isi context ke basis par personalized chat start karega.</div>
+        </div>
+        <div class="planner-error" id="plannerError"></div>
+      </div>
+    </div>
+
+    <!-- CHAT AREA -->
+    <div class="chat-area" id="chatArea">
+      <div class="message-wrap" id="messageWrap"></div>
+    </div>
+
+    <!-- INPUT -->
+    <div class="input-zone" id="inputZone" style="display:none;">
+      <div class="input-wrap">
+        <div class="input-box">
+          <textarea
+            class="chat-input"
+            id="chatInput"
+            placeholder="Type your message…"
+            rows="1"
+            onkeydown="handleKey(event)"
+            oninput="autoResize(this)"
+          ></textarea>
+          <button class="send-btn" id="sendBtn" onclick="sendMessage()">
+            <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+          </button>
+        </div>
+        <div class="input-footer">
+          <span class="input-hint">Enter to send · Shift+Enter for new line</span>
+          <span class="char-count" id="charCount">0</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<button class="scroll-btn" id="scrollBtn" onclick="scrollToBottom()" title="Scroll to bottom">↓</button>
+<div class="toast" id="toast"></div>
+
+<script>
+const SYSTEM_PROMPT = `You are BizMentor AI — a world-class Business Operating System powered by the combined intelligence of a McKinsey strategist, a YC-trained product founder, a top-tier financial analyst, a branding expert, a sales architect, and a legal compliance advisor. Your job is not just to advise — it is to think with the user, build with them, and equip them to win.
+
+You think at the level of a ₹100Cr business even when helping a ₹50K startup — because the thinking that scales is the same.
+
+## OPERATING RULES
+
+### Language Intelligence
+- Auto-detect language from first message: Hindi / English / Hinglish / Punjabi / Tamil / Telugu / Bengali / Other
+- Maintain that language throughout the entire conversation
+- If user switches mid-conversation, switch immediately — no comment needed
+- For Indian users: always use ₹ for money, reference Indian platforms/regulations first
+
+### Conversation Architecture
+- NEVER dump all questions at once — ask exactly 1 clear question per turn
+- Never put 2 asks in the same message
+- Always acknowledge the user's previous answer with a brief, genuine reaction before asking the next question
+- Build on what they say — reference their exact words back to them
+- Feel like a mentor having coffee with a founder — not an AI filling a form
+- Keep the question visually clean and attractive: short opening line, one focused question, optional soft reassurance line
+
+### Truth-First Protocol (BRUTAL TRUTH MODE — Always Active)
+- If the idea has a fatal flaw: say it clearly, early, kindly — with numbers showing why
+- Never validate a bad idea just to be encouraging
+- Always pair a hard truth with a concrete alternative path
+- "Here's the problem — and here's what I'd do instead" is the gold standard response format
+- The user's success matters more than their comfort in this conversation
+
+### Memory Continuity
+- Never make the user repeat themselves — ever
+- Use their exact words back when referencing earlier points
+- Build every new section explicitly on what came before
+- Track all constraints, goals, preferences across the full conversation
+
+## MODULE 0 — ENTRY
+
+The user has ALREADY selected their stage (new idea or existing business) via the UI. You've been told what they selected. Now ask Step 0B — the Report Depth Selector:
+
+"Got it! One quick question before we dive in — what kind of output do you need from this session?
+
+**[1] Quick Scan** — 10-min read: idea viability + top 3 risks + immediate actions
+**[2] Standard Plan** — Full strategy: market, competitors, pricing, roadmap
+**[3] Deep Strategy** — Everything + financial model + branding + sales system
+**[4] Investor Report** — Pitch-grade: market sizing, unit economics, fundraising plan
+**[5] Turnaround Audit** — For struggling businesses: diagnosis + recovery roadmap"
+
+Store this selection as REPORT_MODE and calibrate depth of all subsequent sections accordingly.
+
+## MODULE 1A — NEW BUSINESS INTAKE
+
+After report mode selection, ask about core idea. After detecting industry, branch to the correct industry-specific intake:
+
+Branch A — Restaurant/Food & Beverage/Cloud Kitchen
+Branch B — SaaS/Tech Product/App
+Branch C — Ecommerce/D2C/Product Business
+Branch D — Agency/Consulting/Service Business
+Branch E — Manufacturing/Production
+Branch F — EdTech/Coaching/Training
+Branch G — Content/Creator/Media
+Branch H — Agriculture/AgriTech/Rural
+Branch I — FinTech/Finance/Insurance
+Branch J — Health/Wellness/Medical
+
+Universal follow-up: Budget, Location, Founder Profile, Validation — ask only one question at a time.
+
+## MODULE 1B — EXISTING BUSINESS INTAKE
+
+Set 1: What does your business do? Monthly revenue range?
+Set 2: Biggest problem right now? What have you tried?
+Set 3: City/region? Best acquisition channel?
+Set 4: Team size? 6-month goal?
+Set 5: CAC/LTV/gross margin? Bootstrapped or funded?
+
+## MODULES 2–16 (Deploy based on REPORT_MODE selected)
+
+Module 2: Feasibility Assessment (8-point validation engine — score each GREEN/YELLOW/RED)
+Module 3: Fatal Flaw Detection (always active — flag issues immediately)
+Module 4: Market Sizing (TAM/SAM/SOM with ₹ values)
+Module 5: Competitor Intelligence (known + hidden competitors, white space, fast-attack niche)
+Module 6: Business Model Design (revenue streams, pricing, unit economics)
+Module 7: Financial Projections (startup costs, burn rate, break-even, M3/M6/M12 targets)
+Module 8: Go-to-Market Strategy (channels, launch sequence, first 100 customers)
+Module 9: Brand & Positioning (name, tagline, positioning statement)
+Module 10: Sales System Design (funnel, conversion tactics, retention)
+Module 11: Operations Blueprint (team, tech stack, vendors, SOPs)
+Module 12: Legal & Compliance (business structure, licenses, IP, tax)
+Module 13: Risk Matrix (top risks with mitigation strategies)
+Module 14: 90-Day Roadmap (week-by-week execution plan)
+Module 15: Mentor's Final Verdict (score, insight, vulnerability analysis, verdict: Strong Go/Cautious Go/Pivot/Stop)
+Module 16: Immediate Action Plan (today, this week, this month + KPIs)
+
+## BEHAVIORAL PROTOCOLS
+
+Protocol 1 — Fatal Flaw Detection: Flag immediately, never bury it
+Protocol 2 — Budget Guard: If budget < 30% of needed, present Lean Path First
+Protocol 3 — Brutal Truth Mode: Truth > comfort. Use numbers. Show math. Give alternative.
+Protocol 4 — Language Fluidity: Match language instantly, no commentary
+Protocol 5 — Assumption Transparency: Surface 3–5 assumptions before major recommendations
+Protocol 6 — Sophistication Matching: Calibrate to student/experienced/corporate/side-income
+Protocol 7 — Data Transparency: State basis for market data, never fabricate sources
+Protocol 8 — Follow-Up Pathways: After every major section, offer 2 specific next-step paths
+Protocol 9 — Idea Privacy Cue: "You don't need to share anything confidential"
+Protocol 10 — Recovery Protocol: If user changes key info, acknowledge and update analysis
+
+## FORMATTING GUIDELINES
+- Use **bold** for key terms and numbers
+- Use structured headers with ━━━ for sections
+- Use ₹ for all Indian currency
+- Feasibility scores: GREEN ✅ / YELLOW ⚠️ / RED 🔴
+- Verdicts: ✅ Strong Go | ⚠️ Cautious Go | 🔄 Pivot Recommended | 🛑 Stop & Redesign
+- Keep responses conversational but information-dense
+- End major sections with 2 clear next-step options the user can choose`;
+
+let conversationHistory = [];
+let sessionStarted = false;
+let isLoading = false;
+let userStage = '';
+let reportMode = '';
+let sessionProgress = 0;
+let plannerStage = '';
+let plannerTeamSize = '';
+let intakeSessionData = null;
+const INTAKE_SESSION_KEY = 'bizmentor_intake_session';
+const UI_SESSION_KEY = 'bizmentor_ui_state';
+
+function normalizeMojibake(value) {
+  if (typeof value !== 'string' || !value) return value;
+
+  const replacements = [
+    ['âš ï¸', '\u26A0\uFE0F'],
+    ['ðŸ’¡', '\u{1F4A1}'],
+    ['ðŸš€', '\u{1F680}'],
+    ['ðŸ”´', '\u{1F534}'],
+    ['ðŸ”„', '\u{1F504}'],
+    ['ðŸ›‘', '\u{1F6D1}'],
+    ['â€”', '\u2014'],
+    ['â€“', '\u2013'],
+    ['â€¦', '\u2026'],
+    ['â†º', '\u21BA'],
+    ['â†“', '\u2193'],
+    ['â‚¹', '\u20B9'],
+    ['â€¢', '\u2022'],
+    ['âœ…', '\u2705'],
+    ['Â·', '\u00B7'],
+    ['â”', '\u2501'],
+    ['Â', ''],
+  ];
+
+  return replacements.reduce((text, [from, to]) => text.split(from).join(to), value);
+}
+
+function capturePlannerDraft() {
+  const readValue = (id) => {
+    const el = document.getElementById(id);
+    return el ? el.value.trim() : '';
+  };
+
+  return {
+    businessIdea: readValue('businessIdeaInput'),
+    targetAudience: readValue('targetAudienceInput'),
+    budgetRevenue: readValue('budgetRevenueInput'),
+    location: readValue('locationInput'),
+    context: readValue('contextInput'),
+    goals: Array.from(document.querySelectorAll('#goalOptions input:checked')).map((el) => el.value),
+  };
+}
+
+function applyChoiceSelection(containerSelector, attrName, value) {
+  if (!value) return;
+  document.querySelectorAll(containerSelector + ' .choice-card').forEach((el) => {
+    el.classList.toggle('selected', (el.getAttribute(attrName) || '') === value);
+  });
+}
+
+function applyPlannerDraft(draft) {
+  if (!draft) return;
+  const setValue = (id, value) => {
+    const el = document.getElementById(id);
+    if (el) el.value = value || '';
+  };
+
+  setValue('businessIdeaInput', draft.businessIdea);
+  setValue('targetAudienceInput', draft.targetAudience);
+  setValue('budgetRevenueInput', draft.budgetRevenue);
+  setValue('locationInput', draft.location);
+  setValue('contextInput', draft.context);
+
+  const selectedGoals = new Set(draft.goals || []);
+  document.querySelectorAll('#goalOptions input[type="checkbox"]').forEach((el) => {
+    el.checked = selectedGoals.has(el.value);
+  });
+}
+
+function getCurrentScreen() {
+  if (document.getElementById('chatArea').classList.contains('active')) return 'chat';
+  if (document.getElementById('plannerScreen').classList.contains('active')) return 'planner';
+  return 'welcome';
+}
+
+function getModuleStates() {
+  return ['mod-entry','mod-mode','mod-intake','mod-validation','mod-market','mod-financial','mod-strategy','mod-report']
+    .reduce((acc, id) => {
+      const el = document.getElementById(id);
+      if (!el) return acc;
+      if (el.classList.contains('active')) acc[id] = 'active';
+      else if (el.classList.contains('done')) acc[id] = 'done';
+      else acc[id] = 'pending';
+      return acc;
+    }, {});
+}
+
+function applyModuleStates(states) {
+  if (!states) return;
+  Object.entries(states).forEach(([id, state]) => {
+    setModuleActive(id, state);
+  });
+}
+
+function saveUiSession() {
+  const state = {
+    conversationHistory,
+    sessionStarted,
+    userStage,
+    reportMode,
+    sessionProgress,
+    plannerStage,
+    plannerTeamSize,
+    intakeSessionData,
+    currentScreen: getCurrentScreen(),
+    moduleStates: getModuleStates(),
+    plannerDraft: capturePlannerDraft(),
+    messageMarkup: document.getElementById('messageWrap')?.innerHTML || '',
+    inputVisible: document.getElementById('inputZone')?.style.display || 'none',
+    topResearchVisible: document.getElementById('topResearchBtn')?.classList.contains('visible') || false,
+    stageBadgeVisible: document.getElementById('stageBadge')?.classList.contains('visible') || false,
+    modeBadgeVisible: document.getElementById('modeBadge')?.classList.contains('visible') || false,
+    stageBadgeText: document.getElementById('stageBadge')?.textContent || '',
+    modeBadgeText: document.getElementById('modeBadgeText')?.textContent || '',
+    sidebarStageText: document.getElementById('sb-stage')?.textContent || 'Not selected',
+    sidebarModeText: document.getElementById('sb-mode')?.textContent || 'Not selected',
+    chatInputPlaceholder: document.getElementById('chatInput')?.placeholder || '',
+  };
+
+  try {
+    sessionStorage.setItem(UI_SESSION_KEY, JSON.stringify(state));
+  } catch (err) {
+    console.warn('Unable to persist UI session', err);
+  }
+}
+
+function clearUiSession() {
+  try {
+    sessionStorage.removeItem(UI_SESSION_KEY);
+  } catch (err) {
+    console.warn('Unable to clear UI session', err);
+  }
+}
+
+function restoreUiSession() {
+  let raw = null;
+  try {
+    raw = sessionStorage.getItem(UI_SESSION_KEY);
+  } catch (err) {
+    console.warn('Unable to read UI session', err);
+    return;
+  }
+
+  if (!raw) return;
+
+  let state = null;
+  try {
+    state = JSON.parse(raw);
+  } catch (err) {
+    console.warn('Unable to parse UI session', err);
+    return;
+  }
+
+  if (!state) return;
+
+  conversationHistory = Array.isArray(state.conversationHistory) ? state.conversationHistory : [];
+  sessionStarted = Boolean(state.sessionStarted);
+  userStage = state.userStage || '';
+  reportMode = state.reportMode || '';
+  sessionProgress = Number(state.sessionProgress || 0);
+  plannerStage = state.plannerStage || '';
+  plannerTeamSize = state.plannerTeamSize || '';
+  intakeSessionData = state.intakeSessionData || intakeSessionData;
+
+  if (userStage) {
+    updatePlannerCopy(userStage);
+    const stageLabel = userStage === 'new' ? 'New Business Idea' : 'Existing Business';
+    document.getElementById('sb-stage').textContent = state.sidebarStageText || stageLabel;
+  }
+
+  document.getElementById('sb-mode').textContent = state.sidebarModeText || (reportMode || 'Not selected');
+  document.getElementById('modeBadgeText').textContent = state.modeBadgeText || reportMode || '';
+
+  applyPlannerDraft(state.plannerDraft);
+  applyChoiceSelection('#reportModeGrid', 'data-report-mode', reportMode);
+  applyChoiceSelection('#stageGrid', 'data-stage-value', plannerStage);
+  applyChoiceSelection('#teamSizeGrid', 'data-team-size', plannerTeamSize);
+
+  const welcomeScreen = document.getElementById('welcomeScreen');
+  const plannerScreen = document.getElementById('plannerScreen');
+  const chatArea = document.getElementById('chatArea');
+  const inputZone = document.getElementById('inputZone');
+  const topResearchBtn = document.getElementById('topResearchBtn');
+  const stageBadge = document.getElementById('stageBadge');
+  const modeBadge = document.getElementById('modeBadge');
+  const messageWrap = document.getElementById('messageWrap');
+  const chatInput = document.getElementById('chatInput');
+
+  welcomeScreen.classList.toggle('hidden', state.currentScreen !== 'welcome');
+  plannerScreen.classList.toggle('active', state.currentScreen === 'planner');
+  chatArea.classList.toggle('active', state.currentScreen === 'chat');
+  inputZone.style.display = state.inputVisible || (state.currentScreen === 'chat' ? 'block' : 'none');
+  topResearchBtn.classList.toggle('visible', Boolean(state.topResearchVisible));
+  stageBadge.classList.toggle('visible', Boolean(state.stageBadgeVisible));
+  modeBadge.classList.toggle('visible', Boolean(state.modeBadgeVisible));
+  stageBadge.textContent = state.stageBadgeText || '';
+  messageWrap.innerHTML = state.messageMarkup || '';
+  if (chatInput && state.chatInputPlaceholder) {
+    chatInput.placeholder = state.chatInputPlaceholder;
+  }
+
+  applyModuleStates(state.moduleStates);
+  updateProgress(sessionProgress);
+  scrollToBottom();
+}
+
+const CLEAN_SYSTEM_PROMPT = normalizeMojibake(SYSTEM_PROMPT);
+const ACTIVE_SYSTEM_PROMPT = `You are BizMentor AI - a world-class Business Operating System powered by the combined intelligence of a McKinsey strategist, a YC-trained product founder, a top-tier financial analyst, a branding expert, a sales architect, and a legal compliance advisor. Your job is not just to advise - it is to think with the user, build with them, and equip them to win.
+
+You think at the level of a \u20B9100Cr business even when helping a \u20B950K startup - because the thinking that scales is the same.
+
+## OPERATING RULES
+
+### Language Intelligence
+- Auto-detect language from first message: Hindi / English / Hinglish / Punjabi / Tamil / Telugu / Bengali / Other
+- Maintain that language throughout the entire conversation
+- If user switches mid-conversation, switch immediately - no comment needed
+- For Indian users: always use \u20B9 for money, reference Indian platforms/regulations first
+
+### Conversation Architecture
+- NEVER dump all questions at once - ask exactly 1 clear question per turn
+- Never put 2 asks in the same message
+- Always acknowledge the user's previous answer with a brief, genuine reaction before asking the next question
+- Build on what they say - reference their exact words back to them
+- Feel like a mentor having coffee with a founder - not an AI filling a form
+- Keep the question visually clean and attractive: short opening line, one focused question, optional soft reassurance line
+
+### Truth-First Protocol (BRUTAL TRUTH MODE - Always Active)
+- If the idea has a fatal flaw: say it clearly, early, kindly - with numbers showing why
+- Never validate a bad idea just to be encouraging
+- Always pair a hard truth with a concrete alternative path
+- "Here's the problem - and here's what I'd do instead" is the gold standard response format
+- The user's success matters more than their comfort in this conversation
+
+### Memory Continuity
+- Never make the user repeat themselves - ever
+- Use their exact words back when referencing earlier points
+- Build every new section explicitly on what came before
+- Track all constraints, goals, preferences across the full conversation
+
+## MODULE 0 - ENTRY
+
+The user has ALREADY selected their stage (new idea or existing business) via the UI. You've been told what they selected. Now ask Step 0B - the Report Depth Selector:
+
+"Got it! One quick question before we dive in - what kind of output do you need from this session?
+
+**[1] Quick Scan** - 10-min read: idea viability + top 3 risks + immediate actions
+**[2] Standard Plan** - Full strategy: market, competitors, pricing, roadmap
+**[3] Deep Strategy** - Everything + financial model + branding + sales system
+**[4] Investor Report** - Pitch-grade: market sizing, unit economics, fundraising plan
+**[5] Turnaround Audit** - For struggling businesses: diagnosis + recovery roadmap"
+
+Store this selection as REPORT_MODE and calibrate depth of all subsequent sections accordingly.
+
+## MODULE 1A - NEW BUSINESS INTAKE
+
+After report mode selection, ask about core idea. After detecting industry, branch to the correct industry-specific intake:
+
+Branch A - Restaurant/Food & Beverage/Cloud Kitchen
+Branch B - SaaS/Tech Product/App
+Branch C - Ecommerce/D2C/Product Business
+Branch D - Agency/Consulting/Service Business
+Branch E - Manufacturing/Production
+Branch F - EdTech/Coaching/Training
+Branch G - Content/Creator/Media
+Branch H - Agriculture/AgriTech/Rural
+Branch I - FinTech/Finance/Insurance
+Branch J - Health/Wellness/Medical
+
+Universal follow-up: Budget, Location, Founder Profile, Validation - ask only one question at a time.
+
+## MODULE 1B - EXISTING BUSINESS INTAKE
+
+Set 1: What does your business do? Monthly revenue range?
+Set 2: Biggest problem right now? What have you tried?
+Set 3: City/region? Best acquisition channel?
+Set 4: Team size? 6-month goal?
+Set 5: CAC/LTV/gross margin? Bootstrapped or funded?
+
+## MODULES 2-16 (Deploy based on REPORT_MODE selected)
+
+Module 2: Feasibility Assessment (8-point validation engine - score each GREEN/YELLOW/RED)
+Module 3: Fatal Flaw Detection (always active - flag issues immediately)
+Module 4: Market Sizing (TAM/SAM/SOM with \u20B9 values)
+Module 5: Competitor Intelligence (known + hidden competitors, white space, fast-attack niche)
+Module 6: Business Model Design (revenue streams, pricing, unit economics)
+Module 7: Financial Projections (startup costs, burn rate, break-even, M3/M6/M12 targets)
+Module 8: Go-to-Market Strategy (channels, launch sequence, first 100 customers)
+Module 9: Brand & Positioning (name, tagline, positioning statement)
+Module 10: Sales System Design (funnel, conversion tactics, retention)
+Module 11: Operations Blueprint (team, tech stack, vendors, SOPs)
+Module 12: Legal & Compliance (business structure, licenses, IP, tax)
+Module 13: Risk Matrix (top risks with mitigation strategies)
+Module 14: 90-Day Roadmap (week-by-week execution plan)
+Module 15: Mentor's Final Verdict (score, insight, vulnerability analysis, verdict: Strong Go/Cautious Go/Pivot/Stop)
+Module 16: Immediate Action Plan (today, this week, this month + KPIs)
+
+## BEHAVIORAL PROTOCOLS
+
+Protocol 1 - Fatal Flaw Detection: Flag immediately, never bury it
+Protocol 2 - Budget Guard: If budget < 30% of needed, present Lean Path First
+Protocol 3 - Brutal Truth Mode: Truth > comfort. Use numbers. Show math. Give alternative.
+Protocol 4 - Language Fluidity: Match language instantly, no commentary
+Protocol 5 - Assumption Transparency: Surface 3-5 assumptions before major recommendations
+Protocol 6 - Sophistication Matching: Calibrate to student/experienced/corporate/side-income
+Protocol 7 - Data Transparency: State basis for market data, never fabricate sources
+Protocol 8 - Follow-Up Pathways: After every major section, offer 2 specific next-step paths
+Protocol 9 - Idea Privacy Cue: "You don't need to share anything confidential"
+Protocol 10 - Recovery Protocol: If user changes key info, acknowledge and update analysis
+
+## FORMATTING GUIDELINES
+- Use **bold** for key terms and numbers
+- Use structured headers with ---
+- Use \u20B9 for all Indian currency
+- Feasibility scores: GREEN \u2705 / YELLOW \u26A0\uFE0F / RED \u{1F534}
+- Verdicts: \u2705 Strong Go | \u26A0\uFE0F Cautious Go | \u{1F504} Pivot Recommended | \u{1F6D1} Stop & Redesign
+- Keep responses conversational but information-dense
+- End major sections with 2 clear next-step options the user can choose`;
+
+function normalizeStaticUi() {
+  document.title = normalizeMojibake(document.title);
+
+  const textSelectors = [
+    '.logo-sub',
+    '.reset-btn',
+    '#modeBadgeText',
+    '.welcome-sub',
+    '.entry-icon',
+    '.welcome-tagline',
+    '.input-hint',
+    '#scrollBtn',
+  ];
+
+  for (const selector of textSelectors) {
+    document.querySelectorAll(selector).forEach((node) => {
+      node.textContent = normalizeMojibake(node.textContent);
+    });
+  }
+
+  document.title = 'BizMentor AI - Business Operating System v3.0';
+  document.querySelector('.logo-sub').textContent = 'v3.0 · Operating System';
+  document.querySelector('.reset-btn').textContent = '↺ New Session';
+  document.getElementById('modeBadgeText').textContent = 'Loading...';
+  document.querySelector('.welcome-sub').textContent = "World's most advanced Business Operating System. McKinsey strategy meets founder-grade execution - in one conversation.";
+  document.querySelector('.entry-card.idea-card .entry-icon').textContent = '💡';
+  document.querySelector('.entry-card:not(.idea-card) .entry-icon').textContent = '🚀';
+  document.querySelector('.welcome-tagline').textContent = 'Truth · Strategy · Execution';
+  document.querySelector('.input-hint').textContent = 'Enter to send · Shift+Enter for new line';
+  document.getElementById('scrollBtn').textContent = '↓';
+
+  document.querySelector('.logo-sub').textContent = 'v3.0 \u00B7 Operating System';
+  document.querySelector('.reset-btn').textContent = '\u21BA New Session';
+  document.querySelector('.entry-card.idea-card .entry-icon').textContent = '\u{1F4A1}';
+  document.querySelector('.entry-card:not(.idea-card) .entry-icon').textContent = '\u{1F680}';
+  document.querySelector('.welcome-tagline').textContent = 'Truth \u00B7 Strategy \u00B7 Execution';
+  document.querySelector('.input-hint').textContent = 'Enter to send \u00B7 Shift+Enter for new line';
+  document.getElementById('scrollBtn').textContent = '\u2193';
+
+  const chatInput = document.getElementById('chatInput');
+  if (chatInput) {
+    chatInput.placeholder = 'Type your message...';
+  }
+}
+
+function startSession(type) {
+  clearUiSession();
+  intakeSessionData = null;
+  conversationHistory = [];
+  sessionStarted = false;
+  isLoading = false;
+  reportMode = '';
+  plannerStage = '';
+  plannerTeamSize = '';
+  sessionProgress = 0;
+
+  userStage = type;
+  document.getElementById('welcomeScreen').classList.add('hidden');
+  document.getElementById('plannerScreen').classList.add('active');
+  document.getElementById('chatArea').classList.remove('active');
+  document.getElementById('inputZone').style.display = 'none';
+  document.getElementById('messageWrap').innerHTML = '';
+  document.getElementById('chatInput').value = '';
+  document.getElementById('topResearchBtn').classList.remove('visible');
+  document.getElementById('topResearchBtn').disabled = false;
+  document.getElementById('researchBtn').disabled = false;
+  resetPlannerForm();
+  updatePlannerCopy(type);
+
+  const stageLabel = type === 'new' ? 'New Business Idea' : 'Existing Business';
+  document.getElementById('sb-stage').textContent = stageLabel;
+
+  const stageBadge = document.getElementById('stageBadge');
+  stageBadge.textContent = type === 'new' ? '💡 New Idea' : '🚀 Existing Business';
+  stageBadge.classList.add('visible');
+  stageBadge.textContent = normalizeMojibake(stageBadge.textContent);
+  stageBadge.textContent = type === 'new' ? '\u{1F4A1} New Idea' : '\u{1F680} Existing Business';
+
+  setModuleActive('mod-entry', 'active');
+  ['mod-mode','mod-intake','mod-validation','mod-market','mod-financial','mod-strategy','mod-report'].forEach((id) => {
+    setModuleActive(id, 'pending');
+  });
+  updateProgress(8);
+  saveUiSession();
+}
+
+function updatePlannerCopy(type) {
+  const isNew = type === 'new';
+  document.getElementById('plannerTitle').textContent = isNew
+    ? 'Shape your idea first, then start a smarter AI chat'
+    : 'Map your business first, then start a smarter AI chat';
+  document.getElementById('plannerSub').textContent = isNew
+    ? 'Predefined question cards fill kar lijiye. Submit ke baad BizMentor AI aapki idea context ke basis par personalized questions aur selectable example cards ke saath chat start karega.'
+    : 'Business details yahan lock kar dijiye. Submit ke baad BizMentor AI stored answers ke basis par tailored questions aur selectable example cards ke saath chat start karega.';
+  document.getElementById('ideaQuestionLabel').textContent = isNew ? 'What business idea are you exploring?' : 'What does your business do?';
+  document.getElementById('ideaQuestionHelp').textContent = isNew
+    ? 'Idea ko simple words mein likhiye. Rough version bhi chalega.'
+    : 'Business model, service, product, aur current position ko short form mein likhiye.';
+  document.getElementById('budgetLabelHelp').textContent = isNew
+    ? 'Apna startup budget ya expected initial investment mention kijiye.'
+    : 'Current monthly revenue, budget, ya cash-flow context mention kijiye.';
+  document.getElementById('challengeLabel').textContent = isNew
+    ? 'What should BizMentor know before researching this idea?'
+    : 'What is the biggest problem or growth challenge right now?';
+  document.getElementById('challengeHelp').textContent = isNew
+    ? 'Inspiration, validation, edge, constraints, ya already ki gayi research yahan likh sakte hain.'
+    : 'Jo try kiya hai, kya kaam nahi kar raha, aur kahan clarity chahiye woh yahan likh dijiye.';
+}
+
+function resetPlannerForm() {
+  plannerStage = '';
+  plannerTeamSize = '';
+  reportMode = '';
+  document.querySelectorAll('#plannerScreen .choice-card.selected').forEach((el) => el.classList.remove('selected'));
+  document.querySelectorAll('#goalOptions input[type="checkbox"]').forEach((el) => { el.checked = false; });
+  ['businessIdeaInput', 'targetAudienceInput', 'budgetRevenueInput', 'locationInput', 'contextInput'].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  clearPlannerError();
+  document.getElementById('sb-mode').textContent = 'Not selected';
+  document.getElementById('modeBadge').classList.remove('visible');
+  saveUiSession();
+}
+
+function selectSingleCard(containerSelector, attrName, activeElement) {
+  document.querySelectorAll(containerSelector + ' .choice-card').forEach((el) => el.classList.remove('selected'));
+  activeElement.classList.add('selected');
+  return activeElement.getAttribute(attrName) || '';
+}
+
+function selectPlannerReportMode(el) {
+  reportMode = selectSingleCard('#reportModeGrid', 'data-report-mode', el);
+  document.getElementById('sb-mode').textContent = reportMode;
+  document.getElementById('modeBadgeText').textContent = reportMode;
+  document.getElementById('modeBadge').classList.add('visible');
+  clearPlannerError();
+  saveUiSession();
+}
+
+function selectPlannerStage(el) {
+  plannerStage = selectSingleCard('#stageGrid', 'data-stage-value', el);
+  clearPlannerError();
+  saveUiSession();
+}
+
+function selectPlannerTeamSize(el) {
+  plannerTeamSize = selectSingleCard('#teamSizeGrid', 'data-team-size', el);
+  clearPlannerError();
+  saveUiSession();
+}
+
+function showPlannerError(message) {
+  const el = document.getElementById('plannerError');
+  el.textContent = message;
+  el.classList.add('show');
+}
+
+function clearPlannerError() {
+  const el = document.getElementById('plannerError');
+  el.textContent = '';
+  el.classList.remove('show');
+}
+
+function saveIntakeSession(data) {
+  intakeSessionData = data;
+  try {
+    sessionStorage.setItem(INTAKE_SESSION_KEY, JSON.stringify(data));
+  } catch (err) {
+    console.warn('Unable to persist intake session', err);
+  }
+  saveUiSession();
+}
+
+function clearIntakeSession() {
+  intakeSessionData = null;
+  try {
+    sessionStorage.removeItem(INTAKE_SESSION_KEY);
+  } catch (err) {
+    console.warn('Unable to clear intake session', err);
+  }
+  clearUiSession();
+}
+
+function collectPlannerData() {
+  const goals = Array.from(document.querySelectorAll('#goalOptions input:checked')).map((el) => el.value);
+  return {
+    stageType: userStage === 'new' ? 'new idea' : 'existing business',
+    reportMode,
+    businessIdea: document.getElementById('businessIdeaInput').value.trim(),
+    targetAudience: document.getElementById('targetAudienceInput').value.trim(),
+    stage: plannerStage,
+    teamSize: plannerTeamSize,
+    goals,
+    budgetRevenue: document.getElementById('budgetRevenueInput').value.trim(),
+    location: document.getElementById('locationInput').value.trim(),
+    context: document.getElementById('contextInput').value.trim(),
+  };
+}
+
+function buildResearchPrompt(data) {
+  const goalText = data.goals.length ? data.goals.join(', ') : 'not specified';
+  const contextLines = [
+    `Stage selected in UI: ${data.stageType}`,
+    `Report mode selected in UI: ${data.reportMode}`,
+    `Business summary: ${data.businessIdea}`,
+    `Ideal customer / audience: ${data.targetAudience || 'not specified'}`,
+    `Current maturity: ${data.stage || 'not specified'}`,
+    `Team size: ${data.teamSize || 'not specified'}`,
+    `Goals: ${goalText}`,
+    `Budget or revenue context: ${data.budgetRevenue || 'not specified'}`,
+    `Location or market: ${data.location || 'not specified'}`,
+    `Extra context: ${data.context || 'not specified'}`,
+  ];
+
+  return [
+    `I want a ${data.reportMode} from BizMentor AI.`,
+    '',
+    'Use the structured intake below as the source of truth. Do not ask me more intake questions right now. First generate the full research report based on this data.',
+    '',
+    ...contextLines,
+    '',
+    'After the report, I may ask for corrections or refinements in chat, so keep the analysis editable and conversational.'
+  ].join('\n');
+}
+
+function buildChatKickoffPrompt(data) {
+  const goalText = data.goals.length ? data.goals.join(', ') : 'not specified';
+  const stageSpecificPriority = data.stageType === 'new idea'
+    ? 'For a new idea, prioritize uncertainty-reducing questions like customer segment sharpness, purchase trigger, USP, pricing confidence, founder advantage, validation proof, or launch constraint.'
+    : 'For an existing business, prioritize bottleneck-finding questions like weak conversion, poor repeat rate, unclear positioning, low margins, channel inefficiency, or operational drag.';
+
+  const recommendedQuestionTargets = [
+    !data.targetAudience ? 'target audience clarity' : null,
+    !data.context ? 'differentiation or USP clarity' : null,
+    !data.budgetRevenue ? 'budget / commercial realism' : null,
+    'first acquisition path',
+    'willingness to pay',
+    'biggest execution risk'
+  ].filter(Boolean).join(', ');
+
+  return [
+    'The user has already submitted a business intake form through the UI.',
+    'Use the stored form data as the source of truth.',
+    'Do not ask for report mode again because it is already selected.',
+    'Do not repeat the whole form back to the user.',
+    'Ask exactly one sharp next question that materially improves strategy quality.',
+    '',
+    `Stage selected in UI: ${data.stageType}`,
+    `Report mode selected in UI: ${data.reportMode}`,
+    `Business summary: ${data.businessIdea}`,
+    `Ideal customer / audience: ${data.targetAudience || 'not specified'}`,
+    `Current maturity: ${data.stage || 'not specified'}`,
+    `Team size: ${data.teamSize || 'not specified'}`,
+    `Goals: ${goalText}`,
+    `Budget or revenue context: ${data.budgetRevenue || 'not specified'}`,
+    `Location or market: ${data.location || 'not specified'}`,
+    `Extra context: ${data.context || 'not specified'}`,
+    '',
+    `Priority guidance: ${stageSpecificPriority}`,
+    `Recommended areas for the next question: ${recommendedQuestionTargets}`,
+    '',
+    'Now do this in your next reply:',
+    '- acknowledge the user briefly in one short sentence',
+    '- ask one focused next question only',
+    '- make the question specific and decision-oriented, not broad or generic',
+    '- keep the question under 14 words whenever possible',
+    '- ask only one thing; do not combine two asks with "and"',
+    '- prefer the highest-signal unknown instead of repeating basic intake',
+    '- include 2 to 4 short example answer options whenever possible',
+    '- do not add any Suggestion line',
+    '- make the options short so they render cleanly as selectable cards',
+    '- give one short personalized observation only if it helps sharpen the question',
+    '- do not generate the full report yet',
+    '- use this stored context for all follow-up questions and advice',
+    '- format the question line exactly as: Question: <your question>',
+    '- after that, use: Options:',
+    '- then list each example on its own numbered line like 1. <option>'
+  ].join('\n');
+}
+
+function buildPlannerSummary(data) {
+  const goalText = data.goals.length ? data.goals.join(', ') : 'not specified';
+  return [
+    `Stage: ${data.stageType}`,
+    `Report mode: ${data.reportMode}`,
+    `Business: ${data.businessIdea}`,
+    `Audience: ${data.targetAudience || 'not specified'}`,
+    `Current stage: ${data.stage || 'not specified'}`,
+    `Team size: ${data.teamSize || 'not specified'}`,
+    `Goals: ${goalText}`,
+    `Budget/Revenue: ${data.budgetRevenue || 'not specified'}`,
+    `Location: ${data.location || 'not specified'}`,
+  ].join('\n');
+}
+
+async function generateResearch() {
+  if (isLoading) return;
+  const data = intakeSessionData || collectPlannerData();
+  if (!data || !data.reportMode || !data.businessIdea) {
+    return showPlannerError('Please submit the form first so BizMentor can use your stored business context.');
+  }
+
+  isLoading = true;
+  document.getElementById('researchBtn').disabled = true;
+  document.getElementById('topResearchBtn').disabled = true;
+  setSendDisabled(true);
+  addTypingIndicator();
+
+  const researchRequestText = 'Generate the final researched report based on my form details and our chat so far.';
+  addMessage('user', researchRequestText);
+  conversationHistory.push({ role: 'user', content: researchRequestText });
+
+  try {
+    const response = await fetch('/api/v1/profile-engine/demo/research-report', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...data,
+        conversationHistory: conversationHistory,
+      })
+    });
+
+    const payload = await response.json();
+    removeTypingIndicator();
+
+    const reportText = payload.report || payload.report_text;
+    if (!response.ok || !reportText) {
+      addMessage('assistant', '\u26A0\uFE0F Error: ' + (payload.detail || 'Unable to generate the researched report right now.'));
+    } else {
+      conversationHistory.push({ role: 'assistant', content: reportText });
+      addMessage('assistant', reportText);
+
+      // Add download button if PDF was generated
+      if (payload.pdf_path) {
+        addDownloadButton(payload.pdf_path);
       }
 
-      function show(obj) {
-        output.textContent = JSON.stringify(obj, null, 2);
+      setModuleActive('mod-strategy', 'done');
+      setModuleActive('mod-report', 'active');
+      updateProgress(100);
+      saveUiSession();
+    }
+  } catch (err) {
+    removeTypingIndicator();
+    addMessage('assistant', '\u26A0\uFE0F Connection error while generating the researched report. Please try again.');
+    console.error(err);
+  }
+
+  isLoading = false;
+  document.getElementById('researchBtn').disabled = false;
+  document.getElementById('topResearchBtn').disabled = false;
+  setSendDisabled(false);
+  document.getElementById('chatInput').focus();
+}
+
+function addDownloadButton(pdfPath) {
+  const wrap = document.getElementById('messageWrap');
+  const lastMessage = wrap.lastElementChild;
+  if (!lastMessage || !lastMessage.classList.contains('message')) return;
+  const normalizedFilename = String(pdfPath).split(/[\\/]/).pop();
+
+  // Create download button container
+  const downloadContainer = document.createElement('div');
+  downloadContainer.className = 'download-container';
+  downloadContainer.style.cssText = `
+    margin-top: 16px;
+    padding: 12px 16px;
+    background: rgba(201,168,76,0.08);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  `;
+
+  // Download icon
+  const icon = document.createElement('div');
+  icon.textContent = '📄';
+  icon.style.fontSize = '20px';
+
+  // Download text
+  const text = document.createElement('div');
+  text.innerHTML = '<strong>PDF Report Ready!</strong><br><span style="font-size: 12px; color: var(--text-muted);">Click below to download your professional report</span>';
+
+  // Download button
+  const button = document.createElement('a');
+  button.href = `/api/v1/profile-engine/demo/download-report/${encodeURIComponent(normalizedFilename)}`;
+  button.download = normalizedFilename;
+  button.className = 'download-btn';
+  button.style.cssText = `
+    padding: 8px 16px;
+    background: linear-gradient(135deg, var(--gold), var(--gold-light));
+    color: var(--bg-void);
+    text-decoration: none;
+    border-radius: 8px;
+    font-family: 'Syne', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    box-shadow: 0 4px 12px rgba(201,168,76,0.3);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  `;
+  button.innerHTML = '⬇️ Download PDF';
+  button.onmouseover = () => {
+    button.style.transform = 'translateY(-2px)';
+    button.style.boxShadow = '0 6px 16px rgba(201,168,76,0.4)';
+  };
+  button.onmouseout = () => {
+    button.style.transform = 'translateY(0)';
+    button.style.boxShadow = '0 4px 12px rgba(201,168,76,0.3)';
+  };
+
+  downloadContainer.appendChild(icon);
+  downloadContainer.appendChild(text);
+  downloadContainer.appendChild(button);
+
+  // Add to the last message's body
+  const msgBody = lastMessage.querySelector('.msg-body');
+  if (msgBody) {
+    msgBody.appendChild(downloadContainer);
+  }
+
+  scrollToBottom();
+  saveUiSession();
+}
+
+async function startGuidedChat() {
+  if (isLoading) return;
+
+  const data = collectPlannerData();
+  if (!data.reportMode) return showPlannerError('Please select a report style first.');
+  if (!data.businessIdea || data.businessIdea.length < 12) return showPlannerError('Please add a clearer business description before starting chat.');
+  if (!data.stage) return showPlannerError('Please choose your current stage.');
+  if (!data.teamSize) return showPlannerError('Please choose a team size.');
+  if (!data.goals.length) return showPlannerError('Please select at least one goal.');
+
+  clearPlannerError();
+  try {
+    const validationResponse = await fetch('/api/v1/profile-engine/demo/validate-idea', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    const validationPayload = await validationResponse.json();
+    if (!validationResponse.ok) {
+      return showPlannerError(validationPayload.detail || 'Unable to validate this business idea right now.');
+    }
+    if (!validationPayload.isValid) {
+      return showPlannerError(validationPayload.reason || 'This idea is too unclear to process. Please rewrite it.');
+    }
+  } catch (err) {
+    console.error(err);
+    return showPlannerError('Unable to validate this business idea right now. Please try again.');
+  }
+
+  saveIntakeSession(data);
+  sessionStarted = true;
+  conversationHistory = [];
+  document.getElementById('plannerScreen').classList.remove('active');
+  document.getElementById('chatArea').classList.add('active');
+  document.getElementById('inputZone').style.display = 'none';
+  document.getElementById('messageWrap').innerHTML = '';
+
+  addMessage('user', `Form submitted\n${buildPlannerSummary(data)}`);
+  conversationHistory.push({ role: 'user', content: buildChatKickoffPrompt(data) });
+
+  setModuleActive('mod-mode', 'done');
+  setModuleActive('mod-intake', 'active');
+  updateProgress(35);
+  saveUiSession();
+
+  await fetchAI(false);
+}
+
+function setModuleActive(id, state) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.remove('active', 'done', 'pending');
+  el.classList.add(state);
+  saveUiSession();
+}
+
+function updateProgress(pct) {
+  sessionProgress = pct;
+  document.getElementById('progressBar').style.width = pct + '%';
+  saveUiSession();
+}
+
+function addMessage(role, content, extraClass) {
+  const normalizedContent = normalizeMojibake(content);
+  const wrap = document.getElementById('messageWrap');
+
+  const div = document.createElement('div');
+  div.className = 'message';
+
+  const avatar = document.createElement('div');
+  avatar.className = 'msg-avatar ' + (role === 'assistant' ? 'ai' : 'user');
+  avatar.textContent = role === 'assistant' ? 'BM' : 'U';
+
+  const body = document.createElement('div');
+  body.className = 'msg-body';
+
+  const sender = document.createElement('div');
+  sender.className = 'msg-sender';
+  sender.textContent = role === 'assistant' ? 'BizMentor AI' : 'You';
+
+  const msgContent = document.createElement('div');
+  msgContent.className = 'msg-content' + (role === 'user' ? ' user' : '') + (extraClass ? ' ' + extraClass : '');
+
+  if (role === 'assistant') {
+    const structured = parseAssistantChoices(normalizedContent);
+    msgContent.innerHTML = renderMarkdown(structured.message);
+    if (structured.options.length) {
+      msgContent.appendChild(buildAssistantChoiceGroup(structured.options));
+      const chatInput = document.getElementById('chatInput');
+      if (chatInput) {
+        chatInput.placeholder = 'Option select karo ya apna custom answer type karo...';
       }
+    }
+    // Detect if report mode was just selected
+    detectModuleProgression(normalizedContent);
+  } else {
+    msgContent.textContent = normalizedContent;
+  }
 
-      async function request(path, options) {
-        const res = await fetch(`${apiBase}${path}`, {
-          headers: { "Content-Type": "application/json" },
-          ...options,
-        });
-        const text = await res.text();
-        let json = null;
-        try { json = text ? JSON.parse(text) : null; } catch { json = { raw: text }; }
-        if (!res.ok) {
-          const detail = (json && (json.detail || json.error)) ? (json.detail || json.error) : res.statusText;
-          throw new Error(`${res.status} ${detail}`);
-        }
-        return json;
-      }
+  body.appendChild(sender);
+  body.appendChild(msgContent);
+  div.appendChild(avatar);
+  div.appendChild(body);
+  wrap.appendChild(div);
 
-      function enableFlow() {
-        el("submitInputBtn").disabled = !sessionId;
-        el("getProfileBtn").disabled = !sessionId;
-        el("refreshChatBtn").disabled = !sessionId;
-      }
+  scrollToBottom();
+  saveUiSession();
+  return msgContent;
+}
 
-      function escapeHtml(s) {
-        return String(s)
-          .replace(/&/g, "&amp;")
-          .replace(/</g, "&lt;")
-          .replace(/>/g, "&gt;")
-          .replace(/"/g, "&quot;")
-          .replace(/'/g, "&#39;");
-      }
+function addTypingIndicator() {
+  const wrap = document.getElementById('messageWrap');
+  const div = document.createElement('div');
+  div.className = 'message typing-msg';
+  div.id = 'typingIndicator';
 
-      function renderMessages(msgs) {
-        if (!msgs || msgs.length === 0) {
-          chatBox.innerHTML = `<div class="muted">No messages yet.</div>`;
-          return;
-        }
-        chatBox.innerHTML = msgs.map((m) => {
-          const role = (m.role || "assistant") === "user" ? "user" : "assistant";
-          const key = m.key ? ` <span class="muted">(${escapeHtml(m.key)})</span>` : "";
-          const meta = m.created_at ? `<div class="meta">${escapeHtml(m.created_at)}${key}</div>` : (key ? `<div class="meta">${key}</div>` : "");
-          return `<div class="msg ${role}"><div><div class="bubble">${escapeHtml(m.content || "")}</div>${meta}</div></div>`;
-        }).join("");
-        chatBox.scrollTop = chatBox.scrollHeight;
-      }
+  div.innerHTML = `
+    <div class="msg-avatar ai">BM</div>
+    <div class="msg-body">
+      <div class="msg-sender">BizMentor AI</div>
+      <div class="msg-content">
+        <div class="typing-dots">
+          <span></span><span></span><span></span>
+        </div>
+      </div>
+    </div>`;
+  wrap.appendChild(div);
+  scrollToBottom();
+}
 
-      async function refreshChat() {
-        if (!sessionId) return;
-        try {
-          const data = await request(`/sessions/${sessionId}/messages`, { method: "GET" });
-          renderMessages(data.messages || []);
-        } catch {
-          // Chat is best-effort; don't overwrite primary UI on failure.
-        }
-      }
+function removeTypingIndicator() {
+  const el = document.getElementById('typingIndicator');
+  if (el) el.remove();
+}
 
-      function setQuestionUI(q) {
-        currentQuestion = q || null;
-        el("questionBox").textContent = currentQuestion ? `${currentQuestion.text} (${currentQuestion.question_type})` : "No question.";
+function renderMarkdown(text) {
+  // Process markdown to HTML
+  let html = normalizeMojibake(text)
+    // Code blocks
+    .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>')
+    // Inline code
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    // Bold
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    // Italic
+    .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+    // H3
+    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    // H4
+    .replace(/^#### (.+)$/gm, '<h4>$1</h4>')
+    // Blockquote
+    .replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>')
+    // Unordered list items
+    .replace(/^[•\-\*] (.+)$/gm, '<li>$1</li>')
+    // Ordered list
+    .replace(/^(?:\u2022|-|\*) (.+)$/gm, '<li>$1</li>')
+    .replace(/^\d+\. (.+)$/gm, '<li>$1</li>')
+    // Horizontal rules
+    .replace(/^━+$/gm, '<hr style="border:none;border-top:1px solid var(--border-soft);margin:12px 0;">')
+    // Line breaks to paragraphs
+    .replace(/^-{3,}$/gm, '<hr style="border:none;border-top:1px solid var(--border-soft);margin:12px 0;">')
+    .split('\n\n')
+    .map(p => {
+      p = p.trim();
+      if (!p) return '';
+      if (p.startsWith('<pre>') || p.startsWith('<h') || p.startsWith('<blockquote>') || p.startsWith('<hr') || p.startsWith('<li>')) return p;
+      // Wrap loose <li> items
+      if (p.includes('<li>')) return '<ul>' + p + '</ul>';
+      return '<p>' + p.replace(/\n/g, '<br>') + '</p>';
+    })
+    .join('');
 
-        // toggle input widgets
-        stageWrap.style.display = (currentQuestion && currentQuestion.key === "declared_stage") ? "block" : "none";
-        goalsWrap.style.display = (currentQuestion && currentQuestion.key === "declared_goals") ? "block" : "none";
-        el("answerText").style.display = (currentQuestion && (currentQuestion.key === "declared_stage" || currentQuestion.key === "declared_goals")) ? "none" : "block";
+  return html;
+}
 
-        el("answerBtn").disabled = !currentQuestion;
-      }
+function renderMarkdown(text) {
+  const normalized = normalizeMojibake(text || '').replace(/\r/g, '').trim();
+  if (!normalized) return '';
 
-      function selectedGoals() {
-        return Array.from(document.querySelectorAll(".goalCb"))
-          .filter((cb) => cb.checked)
-          .map((cb) => cb.value);
-      }
+  const formatInline = (value) => value
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*([^*]+)\*/g, '<em>$1</em>');
+  const renderQuestionLine = (value) => {
+    const match = value.match(/^(Question|Sawal)\s*:\s*(.+)$/i);
+    if (!match) return null;
+    return `<p class="msg-question-line"><span class="msg-question-label">${match[1]}:</span>${formatInline(match[2])}</p>`;
+  };
 
-      el("startBtn").addEventListener("click", async () => {
-        try {
-          setStatus("");
-          show({});
-          const user_id = el("userId").value.trim() || null;
-          const body = user_id ? { user_id } : {};
-          const data = await request("/sessions", { method: "POST", body: JSON.stringify(body) });
-          sessionId = data.session_id;
-          sessionInfo.textContent = `session_id: ${sessionId}`;
-          enableFlow();
-          el("startResearchBtn").disabled = true;
-          el("answerMoreBtn").disabled = true;
-          setStatus("Session started.", "success");
-          show(data);
-          await refreshChat();
-        } catch (e) {
-          setStatus(String(e.message || e), "error");
-        }
+  const lines = normalized.split('\n');
+  const blocks = [];
+  let paragraph = [];
+  let listItems = [];
+  let listType = null;
+
+  const flushParagraph = () => {
+    if (!paragraph.length) return;
+    blocks.push(`<p>${formatInline(paragraph.join('<br>'))}</p>`);
+    paragraph = [];
+  };
+
+  const flushList = () => {
+    if (!listItems.length) return;
+    const tag = listType === 'ol' ? 'ol' : 'ul';
+    blocks.push(`<${tag}>${listItems.map((item) => `<li>${formatInline(item)}</li>`).join('')}</${tag}>`);
+    listItems = [];
+    listType = null;
+  };
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+
+    if (!line) {
+      flushParagraph();
+      flushList();
+      continue;
+    }
+
+    const questionLine = renderQuestionLine(line);
+    if (questionLine) {
+      flushParagraph();
+      flushList();
+      blocks.push(questionLine);
+      continue;
+    }
+
+    if (/^---+$/.test(line) || /^â”+$/.test(line)) {
+      flushParagraph();
+      flushList();
+      blocks.push('<hr style="border:none;border-top:1px solid var(--border-soft);margin:12px 0;">');
+      continue;
+    }
+
+    const heading4 = line.match(/^####\s+(.+)$/);
+    if (heading4) {
+      flushParagraph();
+      flushList();
+      blocks.push(`<h4>${formatInline(heading4[1])}</h4>`);
+      continue;
+    }
+
+    const heading3 = line.match(/^###\s+(.+)$/);
+    if (heading3) {
+      flushParagraph();
+      flushList();
+      blocks.push(`<h3>${formatInline(heading3[1])}</h3>`);
+      continue;
+    }
+
+    const quote = line.match(/^>\s+(.+)$/);
+    if (quote) {
+      flushParagraph();
+      flushList();
+      blocks.push(`<blockquote>${formatInline(quote[1])}</blockquote>`);
+      continue;
+    }
+
+    const ordered = line.match(/^\d+\.\s+(.+)$/);
+    if (ordered) {
+      flushParagraph();
+      if (listType && listType !== 'ol') flushList();
+      listType = 'ol';
+      listItems.push(ordered[1]);
+      continue;
+    }
+
+    const unordered = line.match(/^(?:\u2022|â€¢|-|\*)\s+(.+)$/);
+    if (unordered) {
+      flushParagraph();
+      if (listType && listType !== 'ul') flushList();
+      listType = 'ul';
+      listItems.push(unordered[1]);
+      continue;
+    }
+
+    flushList();
+    paragraph.push(line);
+  }
+
+  flushParagraph();
+  flushList();
+
+  return blocks.join('');
+}
+
+function stripMarkdownDecorators(value) {
+  return value
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/\*(.*?)\*/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .trim();
+}
+
+function splitChoiceLabelAndDescription(value) {
+  const cleaned = stripMarkdownDecorators(value);
+  const match = cleaned.match(/^(.*?)(?:\s+-\s+|\s+\u2014\s+|\s+\u2013\s+|\s*:\s+)(.+)$/);
+  if (!match) return { label: cleaned, description: '' };
+  return {
+    label: match[1].trim(),
+    description: match[2].trim(),
+  };
+}
+
+function parseAssistantChoices(text) {
+  const normalized = normalizeMojibake(text).replace(/\r/g, '');
+  const lines = normalized.split('\n');
+  const optionsIndex = lines.findIndex((line) => /^options\s*:?\s*$/i.test(line.trim()));
+
+  if (optionsIndex === -1) {
+    return { message: normalized, options: [] };
+  }
+
+  const message = lines.slice(0, optionsIndex).join('\n').trim();
+  const optionLines = lines.slice(optionsIndex + 1);
+  const options = [];
+
+  optionLines.forEach((line) => {
+    const trimmed = line.trim();
+    if (!trimmed) return;
+
+    const match = trimmed.match(/^(?:[-*]|\d+[.)])\s+(.+)$/);
+    if (!match) return;
+
+    const rawOption = match[1].trim();
+    const recommended = /\(\s*recommended\s*\)/i.test(rawOption);
+    const cleanedOption = rawOption.replace(/\(\s*recommended\s*\)/ig, '').trim();
+    const parts = splitChoiceLabelAndDescription(cleanedOption);
+
+    if (!parts.label) return;
+
+    options.push({
+      label: parts.label,
+      description: parts.description,
+      recommended,
+      submitValue: parts.label,
+    });
+  });
+
+  if (!options.length) {
+    return { message: normalized, options: [] };
+  }
+
+  return { message, options };
+}
+
+function buildAssistantChoiceGroup(options) {
+  const group = document.createElement('div');
+  group.className = 'assistant-choice-group';
+
+  options.forEach((option) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'assistant-choice-btn' + (option.recommended ? ' recommended' : '');
+
+    const head = document.createElement('div');
+    head.className = 'assistant-choice-head';
+
+    const label = document.createElement('div');
+    label.className = 'assistant-choice-label';
+    label.textContent = option.label;
+    head.appendChild(label);
+
+    if (option.recommended) {
+      const badge = document.createElement('span');
+      badge.className = 'assistant-choice-badge';
+      badge.textContent = 'Recommended';
+      head.appendChild(badge);
+    }
+
+    button.appendChild(head);
+
+    if (option.description) {
+      const desc = document.createElement('div');
+      desc.className = 'assistant-choice-desc';
+      desc.textContent = option.description;
+      button.appendChild(desc);
+    }
+
+    button.addEventListener('click', () => {
+      if (isLoading) return;
+      group.querySelectorAll('button').forEach((el) => {
+        el.disabled = true;
       });
+      sendUserMessage(option.submitValue);
+    });
 
-      el("submitInputBtn").addEventListener("click", async () => {
-        try {
-          setStatus("");
-          const raw_input = el("rawInput").value.trim();
-          const data = await request(`/sessions/${sessionId}/input`, { method: "POST", body: JSON.stringify({ raw_input }) });
-          setQuestionUI(data.next_question || null);
-          el("startResearchBtn").disabled = true;
-          el("answerMoreBtn").disabled = true;
-          setStatus(data.message || "Input processed.", "success");
-          show(data);
-          await refreshChat();
-        } catch (e) {
-          setStatus(String(e.message || e), "error");
-        }
-      });
+    group.appendChild(button);
+  });
 
-      el("answerBtn").addEventListener("click", async () => {
-        try {
-          setStatus("");
-          let answer = el("answerText").value.trim();
-          if (currentQuestion.key === "declared_stage") {
-            answer = stageSelect.value;
-          }
-          if (currentQuestion.key === "declared_goals") {
-            answer = selectedGoals();
-          }
-          const data = await request(`/sessions/${sessionId}/answers`, {
-            method: "POST",
-            body: JSON.stringify({ question_key: currentQuestion.key, answer }),
-          });
-          setQuestionUI(data.next_question || null);
-          if (data.profile_ready) {
-            el("startResearchBtn").disabled = false;
-            el("answerMoreBtn").disabled = false;
-          }
-          setStatus(data.message || "Answer processed.", "success");
-          show(data);
-          await refreshChat();
-        } catch (e) {
-          setStatus(String(e.message || e), "error");
-        }
-      });
+  const meta = document.createElement('div');
+  meta.className = 'assistant-choice-meta';
+  meta.textContent = 'Tap an option, or type your own answer below.';
+  group.appendChild(meta);
 
-      el("answerMoreBtn").addEventListener("click", async () => {
-        try {
-          setStatus("");
-          const data = await request(`/sessions/${sessionId}/answer-more`, { method: "POST" });
-          setQuestionUI(data.next_question || null);
-          el("startResearchBtn").disabled = false; // user can still finalize anytime
-          setStatus(data.message || "Optional enabled.", "success");
-          show(data);
-          await refreshChat();
-        } catch (e) {
-          setStatus(String(e.message || e), "error");
-        }
-      });
+  return group;
+}
 
-      el("startResearchBtn").addEventListener("click", async () => {
-        try {
-          setStatus("");
-          const data = await request(`/sessions/${sessionId}/start-research`, { method: "POST" });
-          el("getProfileBtn").disabled = false;
-          setStatus(data.message || "Profile generated.", "success");
-          show(data);
-          await refreshChat();
-        } catch (e) {
-          setStatus(String(e.message || e), "error");
-        }
-      });
+function detectModuleProgression(content) {
+  const lower = content.toLowerCase();
+  if (lower.includes('report mode') || lower.includes('output') && lower.includes('quick scan')) {
+    // Already handled in addMessage
+  }
+  if (lower.includes('what is your business idea') || lower.includes('what does your business do')) {
+    setModuleActive('mod-mode', 'done');
+    setModuleActive('mod-intake', 'active');
+    updateProgress(25);
+    document.getElementById('sb-mode').textContent = reportMode || 'Selected';
+  }
+  if (lower.includes('feasibility') || lower.includes('validation') || lower.includes('green') && lower.includes('red')) {
+    setModuleActive('mod-intake', 'done');
+    setModuleActive('mod-validation', 'active');
+    updateProgress(45);
+  }
+  if (lower.includes('market size') || lower.includes('tam') || lower.includes('competitor')) {
+    setModuleActive('mod-validation', 'done');
+    setModuleActive('mod-market', 'active');
+    updateProgress(60);
+  }
+  if (lower.includes('break-even') || lower.includes('financial') || lower.includes('₹') && lower.includes('month')) {
+    setModuleActive('mod-market', 'done');
+    setModuleActive('mod-financial', 'active');
+    updateProgress(72);
+  }
+  if (lower.includes('go-to-market') || lower.includes('first 100') || lower.includes('launch')) {
+    setModuleActive('mod-financial', 'done');
+    setModuleActive('mod-strategy', 'active');
+    updateProgress(85);
+  }
+  if (lower.includes('final verdict') || lower.includes('strong go') || lower.includes('cautious go') || lower.includes('pivot recommended') || lower.includes('action plan')) {
+    setModuleActive('mod-strategy', 'done');
+    setModuleActive('mod-report', 'active');
+    updateProgress(96);
+  }
+}
 
-      el("getProfileBtn").addEventListener("click", async () => {
-        try {
-          setStatus("");
-          const data = await request(`/sessions/${sessionId}/profile`, { method: "GET" });
-          setStatus(data.message || "Profile fetched.", "success");
-          show(data);
-          await refreshChat();
-        } catch (e) {
-          setStatus(String(e.message || e), "error");
-        }
-      });
+function selectReportMode(num, label) {
+  reportMode = label;
+  document.getElementById('sb-mode').textContent = label;
+  const modeBadge = document.getElementById('modeBadge');
+  document.getElementById('modeBadgeText').textContent = label;
+  modeBadge.classList.add('visible');
+  sendUserMessage(`${num} - ${label}`);
+  return;
 
-      el("refreshChatBtn").addEventListener("click", async () => {
-        await refreshChat();
-      });
-    </script>
-  </body>
+  sendUserMessage(num + ' — ' + label);
+}
+
+async function fetchAI(firstMessage) {
+  if (isLoading) return;
+  isLoading = true;
+  document.getElementById('researchBtn').disabled = true;
+  setSendDisabled(true);
+  addTypingIndicator();
+
+  try {
+    const response = await fetch('/api/v1/profile-engine/demo/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        max_tokens: 1500,
+        temperature: 0.3,
+        messages: conversationHistory
+      })
+    });
+
+    const data = await response.json();
+    removeTypingIndicator();
+
+    if (response.ok && data.reply) {
+      const aiText = data.reply;
+      conversationHistory.push({ role: 'assistant', content: aiText });
+      addMessage('assistant', aiText);
+      if (sessionStarted) {
+        document.getElementById('inputZone').style.display = 'block';
+        document.getElementById('chatInput').placeholder = 'Report ko refine karna ho, correction deni ho, ya follow-up poochna ho...';
+        document.getElementById('topResearchBtn').classList.add('visible');
+        saveUiSession();
+      }
+      isLoading = false;
+      document.getElementById('researchBtn').disabled = false;
+      document.getElementById('topResearchBtn').disabled = false;
+      setSendDisabled(false);
+      document.getElementById('chatInput').focus();
+      return;
+    }
+
+    addMessage('assistant', '\u26A0\uFE0F Error: ' + (data.detail || 'Something went wrong. Please try again.'));
+    isLoading = false;
+    document.getElementById('researchBtn').disabled = false;
+    document.getElementById('topResearchBtn').disabled = false;
+    setSendDisabled(false);
+    document.getElementById('chatInput').focus();
+    return;
+
+    if (data.content && data.content[0]) {
+      const aiText = data.content[0].text;
+      conversationHistory.push({ role: 'assistant', content: aiText });
+      addMessage('assistant', aiText);
+    } else if (data.error) {
+      addMessage('assistant', '⚠️ Error: ' + (data.error.message || 'Something went wrong. Please try again.'));
+    }
+  } catch (err) {
+    removeTypingIndicator();
+    addMessage('assistant', '⚠️ Connection error. Please check your network and try again.');
+    console.error(err);
+  }
+
+  isLoading = false;
+  document.getElementById('researchBtn').disabled = false;
+  document.getElementById('topResearchBtn').disabled = false;
+  setSendDisabled(false);
+  document.getElementById('chatInput').focus();
+}
+
+function sendUserMessage(text) {
+  text = normalizeMojibake(text).trim();
+  if (!text) return;
+  addMessage('user', text);
+  conversationHistory.push({ role: 'user', content: text });
+  fetchAI(false);
+}
+
+function sendMessage() {
+  const input = document.getElementById('chatInput');
+  const text = input.value.trim();
+  if (!text || isLoading) return;
+  input.value = '';
+  input.style.height = 'auto';
+  document.getElementById('charCount').textContent = '0';
+  sendUserMessage(text);
+}
+
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+}
+
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 140) + 'px';
+  document.getElementById('charCount').textContent = el.value.length;
+}
+
+function setSendDisabled(v) {
+  document.getElementById('sendBtn').disabled = v;
+}
+
+function scrollToBottom() {
+  const chat = document.getElementById('chatArea');
+  chat.scrollTop = chat.scrollHeight;
+}
+
+function resetSession() {
+  clearIntakeSession();
+  conversationHistory = [];
+  sessionStarted = false;
+  isLoading = false;
+  userStage = '';
+  reportMode = '';
+  plannerStage = '';
+  plannerTeamSize = '';
+
+  document.getElementById('welcomeScreen').classList.remove('hidden');
+  document.getElementById('plannerScreen').classList.remove('active');
+  document.getElementById('chatArea').classList.remove('active');
+  document.getElementById('inputZone').style.display = 'none';
+  document.getElementById('messageWrap').innerHTML = '';
+  document.getElementById('chatInput').value = '';
+  document.getElementById('progressBar').style.width = '0%';
+  document.getElementById('researchBtn').disabled = false;
+  document.getElementById('topResearchBtn').disabled = false;
+  document.getElementById('topResearchBtn').classList.remove('visible');
+
+  document.getElementById('modeBadge').classList.remove('visible');
+  document.getElementById('stageBadge').classList.remove('visible');
+  document.getElementById('sb-stage').textContent = 'Not selected';
+  document.getElementById('sb-mode').textContent = 'Not selected';
+  resetPlannerForm();
+
+  ['mod-entry','mod-mode','mod-intake','mod-validation','mod-market','mod-financial','mod-strategy','mod-report'].forEach(id => {
+    setModuleActive(id, id === 'mod-entry' ? 'done' : 'pending');
+  });
+  clearUiSession();
+}
+
+// Scroll watcher
+document.getElementById('chatArea').addEventListener('scroll', function() {
+  const nearBottom = this.scrollHeight - this.scrollTop - this.clientHeight < 100;
+  document.getElementById('scrollBtn').classList.toggle('show', !nearBottom);
+});
+
+['businessIdeaInput', 'targetAudienceInput', 'budgetRevenueInput', 'locationInput', 'contextInput'].forEach((id) => {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener('input', () => {
+    saveUiSession();
+  });
+});
+
+document.querySelectorAll('#goalOptions input[type="checkbox"]').forEach((el) => {
+  el.addEventListener('change', () => {
+    saveUiSession();
+  });
+});
+
+normalizeStaticUi();
+restoreUiSession();
+</script>
+</body>
 </html>

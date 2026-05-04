@@ -11,6 +11,7 @@ HTTP/API calls in service files.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -26,6 +27,8 @@ logger = logging.getLogger(__name__)
 
 _CEREBRAS_BASE_URL = "https://api.cerebras.ai/v1"
 _OPENAI_BASE_URL = "https://api.openai.com/v1"
+_DEFAULT_CONTEXT_LIMIT = 32000
+_RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 
 
 def _active_provider() -> tuple[str, str, str]:
@@ -105,14 +108,41 @@ class LLMClient:
         Returns:
             The raw assistant reply as a string.
         """
-        messages: list[dict[str, str]] = []
-        if system:
-            messages.append({"role": "system", "content": system})
-        messages.append({"role": "user", "content": prompt})
+        payload_messages = self._fit_messages_to_context(
+            messages=[{"role": "user", "content": prompt}],
+            system=system,
+            max_tokens=max_tokens or self._max_tokens,
+        )
 
         payload: dict[str, Any] = {
             "model": self._model,
-            "messages": messages,
+            "messages": payload_messages,
+            "temperature": temperature if temperature is not None else self._temperature,
+            "max_tokens": max_tokens or self._max_tokens,
+        }
+
+        response = await self._post("/chat/completions", payload)
+        return response["choices"][0]["message"]["content"].strip()
+
+    async def complete_messages(
+        self,
+        messages: list[dict[str, str]],
+        system: str | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+    ) -> str:
+        """
+        Send a multi-turn chat completion request and return assistant text.
+        """
+        payload_messages = self._fit_messages_to_context(
+            messages=messages,
+            system=system,
+            max_tokens=max_tokens or self._max_tokens,
+        )
+
+        payload: dict[str, Any] = {
+            "model": self._model,
+            "messages": payload_messages,
             "temperature": temperature if temperature is not None else self._temperature,
             "max_tokens": max_tokens or self._max_tokens,
         }
@@ -152,23 +182,96 @@ class LLMClient:
             "Authorization": f"Bearer {self._api_key}",
             "Content-Type": "application/json",
         }
+        max_attempts = max(1, int(os.getenv("LLM_MAX_RETRIES", "5")))
+        backoff_seconds = max(0.25, float(os.getenv("LLM_RETRY_BACKOFF_SECONDS", "2.0")))
+
         async with httpx.AsyncClient(timeout=self._timeout) as http:
-            try:
-                response = await http.post(url, json=payload, headers=headers)
-                response.raise_for_status()
-                return response.json()
-            except httpx.HTTPStatusError as exc:
-                logger.error(
-                    "LLM API error %s: %s",
-                    exc.response.status_code,
-                    exc.response.text[:500],
-                )
-                raise LLMClientError(
-                    f"LLM provider returned {exc.response.status_code}: {exc.response.text[:200]}"
-                ) from exc
-            except httpx.RequestError as exc:
-                logger.error("LLM request failed: %s", exc)
-                raise LLMClientError(f"LLM request failed: {exc}") from exc
+            for attempt in range(1, max_attempts + 1):
+                try:
+                    response = await http.post(url, json=payload, headers=headers)
+                    response.raise_for_status()
+                    return response.json()
+                except httpx.HTTPStatusError as exc:
+                    status_code = exc.response.status_code
+                    response_text = exc.response.text[:500]
+                    logger.error("LLM API error %s: %s", status_code, response_text)
+
+                    if attempt < max_attempts and status_code in _RETRYABLE_STATUS_CODES:
+                        await asyncio.sleep(backoff_seconds ** attempt)
+                        continue
+
+                    error_cls = LLMRateLimitError if status_code == 429 else LLMClientError
+                    raise error_cls(
+                        message=f"LLM provider returned {status_code}: {exc.response.text[:200]}",
+                        status_code=status_code,
+                        response_text=exc.response.text[:500],
+                    ) from exc
+                except httpx.RequestError as exc:
+                    logger.error("LLM request failed: %s", exc)
+                    if attempt < max_attempts:
+                        await asyncio.sleep(backoff_seconds ** attempt)
+                        continue
+                    raise LLMClientError(f"LLM request failed: {exc}") from exc
+
+    def _fit_messages_to_context(
+        self,
+        messages: list[dict[str, str]],
+        system: str | None,
+        max_tokens: int,
+    ) -> list[dict[str, str]]:
+        """
+        Keep the newest messages and trim oversized content so the request stays
+        below the provider context limit.
+        """
+        context_limit = int(os.getenv("LLM_CONTEXT_LIMIT", str(_DEFAULT_CONTEXT_LIMIT)))
+        input_budget = max(1200, context_limit - max_tokens - 512)
+
+        fitted: list[dict[str, str]] = []
+        used = 0
+
+        if system:
+            system_budget = max(600, int(input_budget * 0.55))
+            system_content = self._truncate_text(system, system_budget)
+            fitted.append({"role": "system", "content": system_content})
+            used += self._estimate_tokens(system_content)
+
+        kept_reversed: list[dict[str, str]] = []
+        for message in reversed(messages):
+            role = message.get("role", "user")
+            content = message.get("content", "")
+            if not content:
+                continue
+
+            remaining = input_budget - used
+            if remaining <= 120:
+                break
+
+            truncated_content = self._truncate_text(content, remaining)
+            message_tokens = self._estimate_tokens(truncated_content)
+            if message_tokens > remaining:
+                continue
+
+            kept_reversed.append({"role": role, "content": truncated_content})
+            used += message_tokens
+
+        fitted.extend(reversed(kept_reversed))
+        return fitted
+
+    @staticmethod
+    def _estimate_tokens(text: str) -> int:
+        return max(1, len(text) // 4)
+
+    def _truncate_text(self, text: str, max_tokens: int) -> str:
+        max_chars = max_tokens * 4
+        if len(text) <= max_chars:
+            return text
+        marker = "\n[Middle content trimmed for context length.]\n"
+        available = max(0, max_chars - len(marker))
+        head_chars = int(available * 0.6)
+        tail_chars = max(0, available - head_chars)
+        head = text[:head_chars].rstrip()
+        tail = text[-tail_chars:].lstrip() if tail_chars else ""
+        return f"{head}{marker}{tail}"
 
 
 # ---------------------------------------------------------------------------
@@ -179,11 +282,7 @@ _default_client: LLMClient | None = None
 
 
 def get_llm_client() -> LLMClient:
-    """Return a module-level singleton LLMClient (lazy-initialised)."""
-    global _default_client
-    if _default_client is None:
-        _default_client = LLMClient()
-    return _default_client
+    return LLMClient()
 
 
 # ---------------------------------------------------------------------------
@@ -193,6 +292,21 @@ def get_llm_client() -> LLMClient:
 
 class LLMClientError(RuntimeError):
     """Raised when the LLM provider returns an error or times out."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        status_code: int | None = None,
+        response_text: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+        self.response_text = response_text
+
+
+class LLMRateLimitError(LLMClientError):
+    """Raised when the LLM provider is temporarily rate limited."""
 
 
 # ---------------------------------------------------------------------------

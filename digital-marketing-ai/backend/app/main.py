@@ -17,7 +17,7 @@ _BACKEND_DIR = Path(__file__).resolve().parents[1]
 try:
     from dotenv import load_dotenv  # type: ignore
 
-    load_dotenv(dotenv_path=_BACKEND_DIR / ".env", override=False)
+    load_dotenv(dotenv_path=_BACKEND_DIR / ".env", override=True)
 except Exception:
     # python-dotenv is optional; env can be provided by the shell instead.
     pass
