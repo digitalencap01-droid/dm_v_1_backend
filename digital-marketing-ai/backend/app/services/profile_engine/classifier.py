@@ -16,6 +16,18 @@ from app.services.profile_engine.normalizer import normalize_industry, normalize
 
 logger = logging.getLogger(__name__)
 
+_APPAREL_KEYWORDS = {
+    "t-shirt",
+    "tshirts",
+    "t shirt",
+    "hoodie",
+    "clothing",
+    "apparel",
+    "fashion",
+    "streetwear",
+    "sneakers",
+}
+
 
 async def classify(extracted: ExtractedData, llm: LLMClient) -> ClassifiedProfile:
     """
@@ -38,11 +50,26 @@ async def classify(extracted: ExtractedData, llm: LLMClient) -> ClassifiedProfil
 
     try:
         data = await llm.complete_json(prompt=prompt, system=SYSTEM_CLASSIFICATION)
+        result = _parse_llm_response(data, extracted)
     except (LLMClientError, ValueError) as exc:
         logger.warning("Classification LLM call failed: %s — using fallback", exc)
-        return _fallback_from_hints(extracted)
+        result = _fallback_from_hints(extracted)
+    
+    # Ensure we have non-UNKNOWN/non-OTHER values
+    # If LLM returned UNKNOWN/OTHER, try harder with context
+    if result.persona == PersonaType.UNKNOWN and extracted.raw_persona_hint:
+        result.persona = normalize_persona(extracted.raw_persona_hint)
+        if result.persona != PersonaType.UNKNOWN:
+            result.persona_confidence = min(0.6, result.persona_confidence)
+    
+    if result.industry == IndustryType.OTHER and extracted.raw_industry_hint:
+        result.industry = normalize_industry(extracted.raw_industry_hint)
+        if result.industry != IndustryType.OTHER:
+            result.industry_confidence = min(0.6, result.industry_confidence)
 
-    return _parse_llm_response(data, extracted)
+    _apply_deterministic_offer_industry_fallback(result, extracted)
+    
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -94,6 +121,34 @@ def _fallback_from_hints(extracted: ExtractedData) -> ClassifiedProfile:
         raw_persona=extracted.raw_persona_hint,
         raw_industry=extracted.raw_industry_hint,
     )
+
+
+def _apply_deterministic_offer_industry_fallback(
+    result: ClassifiedProfile,
+    extracted: ExtractedData,
+) -> None:
+    """
+    Deterministic recovery when industry is OTHER but offer strongly signals a common bucket.
+    """
+    if result.industry != IndustryType.OTHER:
+        return
+    offer = (extracted.product_or_service or "").strip().lower()
+    if not offer:
+        return
+
+    if any(k in offer for k in _APPAREL_KEYWORDS):
+        result.industry = IndustryType.ECOMMERCE
+        result.industry_confidence = max(result.industry_confidence, 0.5)
+        if not result.raw_industry:
+            result.raw_industry = "deterministic_offer_fallback"
+        if isinstance(extracted.metadata, dict):
+            extracted.metadata.setdefault("field_provenance", {})
+            prov = extracted.metadata.get("field_provenance")
+            if isinstance(prov, dict):
+                prov["industry"] = {
+                    "source": "deterministic_offer_fallback",
+                    "confidence": float(result.industry_confidence),
+                }
 
 
 def _clamp(value: object, lo: float = 0.0, hi: float = 1.0) -> float:

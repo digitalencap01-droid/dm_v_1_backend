@@ -8,6 +8,7 @@ call LLM, normalise, and return NeedRouting with primary and secondary needs.
 from __future__ import annotations
 
 import logging
+import json
 
 from app.schemas.profile_engine import (
     ClassifiedProfile,
@@ -57,9 +58,9 @@ async def route_need(
         data = await llm.complete_json(prompt=prompt, system=SYSTEM_NEED_ROUTING)
     except (LLMClientError, ValueError) as exc:
         logger.warning("Need-routing LLM call failed: %s — using heuristic fallback", exc)
-        return _heuristic_fallback(extracted, readiness)
+        return _heuristic_fallback(extracted, readiness, answers)
 
-    return _parse_llm_response(data, extracted, readiness)
+    return _parse_llm_response(data, extracted, readiness, answers)
 
 
 # ---------------------------------------------------------------------------
@@ -71,6 +72,7 @@ def _parse_llm_response(
     data: dict,
     extracted: ExtractedData,
     readiness: ReadinessAssessment,
+    answers: dict[str, str],
 ) -> NeedRouting:
     try:
         raw_primary = data.get("primary_need", "")
@@ -87,20 +89,28 @@ def _parse_llm_response(
         if primary_need == NeedState.UNKNOWN:
             need_confidence = min(need_confidence, 0.3)
 
+        if primary_need == NeedState.UNKNOWN:
+            fallback = _goal_to_primary_need_fallback(answers)
+            if fallback is not None:
+                primary_need = fallback
+                need_confidence = max(need_confidence, 0.5)
+
         return NeedRouting(
             primary_need=primary_need,
             secondary_needs=secondary_needs,
             need_confidence=need_confidence,
-            reasoning=_safe_str(data.get("reasoning")),
+            reasoning=_safe_str(data.get("reasoning"))
+            or ("Deterministic fallback from declared goals." if primary_need != NeedState.UNKNOWN else None),
         )
     except Exception as exc:
         logger.warning("Failed to parse need-routing response: %s", exc)
-        return _heuristic_fallback(extracted, readiness)
+        return _heuristic_fallback(extracted, readiness, answers)
 
 
 def _heuristic_fallback(
     extracted: ExtractedData,
     readiness: ReadinessAssessment,
+    answers: dict[str, str],
 ) -> NeedRouting:
     """
     Simple rule-based fallback when LLM is unavailable.
@@ -117,12 +127,53 @@ def _heuristic_fallback(
         ReadinessLevel.UNKNOWN: NeedState.UNKNOWN,
     }
     primary = level_to_need.get(readiness.readiness_level, NeedState.UNKNOWN)
+    if primary == NeedState.UNKNOWN:
+        fallback = _goal_to_primary_need_fallback(answers)
+        if fallback is not None:
+            primary = fallback
     return NeedRouting(
         primary_need=primary,
         secondary_needs=[],
-        need_confidence=0.25,
-        reasoning="Heuristic fallback based on readiness level.",
+        need_confidence=0.5 if primary != NeedState.UNKNOWN else 0.25,
+        reasoning=(
+            "Deterministic fallback from declared goals."
+            if primary != NeedState.UNKNOWN
+            else "Heuristic fallback based on readiness level."
+        ),
     )
+
+
+def _goal_to_primary_need_fallback(answers: dict[str, str]) -> NeedState | None:
+    raw = answers.get("declared_goals")
+    if not isinstance(raw, str) or not raw.strip():
+        return None
+
+    parsed: list[str] = []
+    text = raw.strip()
+    if text.startswith("["):
+        try:
+            value = json.loads(text)
+            if isinstance(value, list):
+                parsed = [str(x) for x in value]
+        except Exception:
+            parsed = []
+    else:
+        parsed = [p.strip() for p in text.split(",") if p.strip()]
+
+    mapping: dict[str, NeedState] = {
+        "brand_awareness": NeedState.BRAND_AWARENESS,
+        "lead_generation": NeedState.LEAD_GENERATION,
+        "customer_retention": NeedState.CUSTOMER_RETENTION,
+        "revenue_growth": NeedState.REVENUE_GROWTH,
+        "product_launch": NeedState.PRODUCT_LAUNCH,
+        "market_expansion": NeedState.MARKET_EXPANSION,
+    }
+    for item in parsed:
+        key = str(item).strip().lower()
+        if key in mapping:
+            return mapping[key]
+
+    return None
 
 
 def _clamp(value: object, lo: float = 0.0, hi: float = 1.0) -> float:

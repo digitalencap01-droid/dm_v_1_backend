@@ -23,8 +23,11 @@ except Exception:
     pass
 
 from app.api.routes import profile_engine
+from app.api.routes import research_engine
 from app.db.session import engine
+from app.db.research_session import research_engine as research_db_engine
 from app.services.profile_engine.model import ProfileEngineBase
+from app.models.research_engine import ResearchEngineBase
 
 
 def _cors_origins() -> list[str]:
@@ -41,6 +44,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Create tables for the profile engine (demo/dev convenience).
     async with engine.begin() as conn:
         await conn.run_sync(ProfileEngineBase.metadata.create_all)
+
+    # Create tables for the research engine (demo/dev convenience).
+    async with research_db_engine.begin() as conn:
+        await conn.run_sync(ResearchEngineBase.metadata.create_all)
     yield
 
 
@@ -56,6 +63,7 @@ app.add_middleware(
 
 # API routes
 app.include_router(profile_engine.router, prefix="/api/v1")
+app.include_router(research_engine.router, prefix="/api/v1")
 
 # Avoid noisy browser console 404s.
 @app.get("/favicon.ico", include_in_schema=False)

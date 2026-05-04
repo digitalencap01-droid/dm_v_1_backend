@@ -12,13 +12,14 @@ from __future__ import annotations
 
 import logging
 
-from app.schemas.profile_engine import Question, QuestionType, SessionState
+from app.schemas.profile_engine import Question, QuestionOption, QuestionType, SessionState, ReadinessLevel
 from app.services.llm.prompts import QUESTION_BANK
 
 logger = logging.getLogger(__name__)
 
 # Maximum total questions to ask per session (prevents infinite loops)
-_MAX_QUESTIONS_PER_SESSION = 4
+# Keep this high enough to allow baseline + dynamic required + optional follow-ups.
+_MAX_QUESTIONS_PER_SESSION = 10
 
 _BASELINE_KEYS: list[str] = ["declared_stage", "team_size", "declared_goals"]
 
@@ -38,11 +39,11 @@ def select_question(state: SessionState) -> Question | None:
     Returns:
         The next Question to present, or None if collection is complete.
     """
-    if len(state.asked_questions) >= _MAX_QUESTIONS_PER_SESSION:
+    answered = set(state.asked_questions) | set(state.answers.keys())
+
+    if len(answered) >= _MAX_QUESTIONS_PER_SESSION:
         logger.debug("Max questions reached for session %s", state.session_id)
         return None
-
-    answered = set(state.asked_questions) | set(state.answers.keys())
 
     # --- Tier 1: Baseline required (fixed order) ---
     for key in _BASELINE_KEYS:
@@ -61,7 +62,17 @@ def select_question(state: SessionState) -> Question | None:
     # --- Tier 2: Optional only if user opts in ---
     if state.allow_optional:
         for q_def in QUESTION_BANK:
-            if q_def["type"] == QuestionType.OPTIONAL and q_def["key"] not in answered:
+            q_type = q_def.get("type", QuestionType.OPTIONAL)
+            try:
+                q_type_enum = q_type if isinstance(q_type, QuestionType) else QuestionType(str(q_type))
+            except ValueError:
+                q_type_enum = QuestionType.OPTIONAL
+
+            # Hard UX rule: never ask website for idea-stage users.
+            if state.declared_stage == ReadinessLevel.IDEA_STAGE and q_def.get("key") == "website_url":
+                continue
+
+            if q_type_enum == QuestionType.OPTIONAL and q_def.get("key") not in answered:
                 logger.debug("Selecting optional question: %s", q_def["key"])
                 return _to_question(q_def)
 
@@ -84,11 +95,38 @@ def has_more_questions(state: SessionState) -> bool:
 
 
 def _to_question(q_def: dict) -> Question:
+    """Convert question definition (from QUESTION_BANK) to Question schema.
+    
+    Handles new optional fields with safe fallbacks for backward compatibility.
+    """
+    # Parse options from question definition
+    options = []
+    if "options" in q_def:
+        for opt in q_def["options"]:
+            if not isinstance(opt, dict):
+                continue
+            options.append(
+                QuestionOption(
+                    value=str(opt.get("value") or ""),
+                    label=str(opt.get("label") or ""),
+                    requires_text=bool(opt.get("requires_text") or False),
+                    text_placeholder=(
+                        str(opt.get("text_placeholder")).strip()
+                        if opt.get("text_placeholder") is not None
+                        else None
+                    ),
+                )
+            )
+    
     return Question(
         key=q_def["key"],
         text=q_def["text"],
         question_type=QuestionType(q_def.get("type", QuestionType.OPTIONAL)),
         context=q_def.get("context"),
+        options=options,
+        input_type=q_def.get("input_type", "text"),
+        allow_multiple=q_def.get("allow_multiple", False),
+        allow_custom=q_def.get("allow_custom", True),
     )
 
 

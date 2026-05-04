@@ -66,30 +66,7 @@
       <div class="card">
         <h3>3) Follow-up question</h3>
         <div id="questionBox" class="muted">No question yet.</div>
-        <div id="stageWrap" style="display:none; margin-top: 10px;">
-          <label class="muted">Stage</label>
-          <select id="stageSelect" style="width:100%; padding:10px; font-size:14px;">
-            <option value="idea_stage">idea_stage</option>
-            <option value="mvp">mvp</option>
-            <option value="early_traction">early_traction</option>
-            <option value="scaling">scaling</option>
-            <option value="mature">mature</option>
-            <option value="not_sure">not_sure</option>
-          </select>
-        </div>
-
-        <div id="goalsWrap" style="display:none; margin-top: 10px;">
-          <div class="muted">Goals (multi-select)</div>
-          <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px;">
-            <label><input type="checkbox" value="brand_awareness" class="goalCb" /> brand_awareness</label>
-            <label><input type="checkbox" value="lead_generation" class="goalCb" /> lead_generation</label>
-            <label><input type="checkbox" value="customer_retention" class="goalCb" /> customer_retention</label>
-            <label><input type="checkbox" value="revenue_growth" class="goalCb" /> revenue_growth</label>
-            <label><input type="checkbox" value="product_launch" class="goalCb" /> product_launch</label>
-            <label><input type="checkbox" value="market_expansion" class="goalCb" /> market_expansion</label>
-            <label><input type="checkbox" value="other" class="goalCb" /> other</label>
-          </div>
-        </div>
+        <div id="optionsWrap" style="display:none; margin-top: 10px;"></div>
 
         <textarea id="answerText" placeholder="Type your answer..." style="margin-top:10px;"></textarea>
         <div style="margin-top: 10px;">
@@ -119,9 +96,7 @@
       const output = el("output");
       const statusLine = el("statusLine");
       const sessionInfo = el("sessionInfo");
-      const stageWrap = el("stageWrap");
-      const goalsWrap = el("goalsWrap");
-      const stageSelect = el("stageSelect");
+      const optionsWrap = el("optionsWrap");
       const chatBox = el("chatBox");
 
       function setStatus(msg, kind) {
@@ -187,22 +162,63 @@
         }
       }
 
+      function renderOptions(q) {
+        optionsWrap.innerHTML = "";
+        if (!q || !q.options || q.options.length === 0) {
+          optionsWrap.style.display = "none";
+          return;
+        }
+
+        if (q.input_type === "single_select") {
+          optionsWrap.style.display = "block";
+          const select = document.createElement("select");
+          select.id = "dynSelect";
+          select.style.width = "100%";
+          select.style.padding = "10px";
+          select.style.fontSize = "14px";
+          (q.options || []).forEach((opt) => {
+            const o = document.createElement("option");
+            o.value = opt.value;
+            o.textContent = opt.label || opt.value;
+            select.appendChild(o);
+          });
+          optionsWrap.appendChild(select);
+          return;
+        }
+
+        if (q.input_type === "multi_select") {
+          optionsWrap.style.display = "block";
+          const grid = document.createElement("div");
+          grid.style.display = "grid";
+          grid.style.gridTemplateColumns = "1fr 1fr";
+          grid.style.gap = "8px";
+          (q.options || []).forEach((opt) => {
+            const label = document.createElement("label");
+            const cb = document.createElement("input");
+            cb.type = "checkbox";
+            cb.value = opt.value;
+            cb.className = "dynCb";
+            label.appendChild(cb);
+            label.appendChild(document.createTextNode(" " + (opt.label || opt.value)));
+            grid.appendChild(label);
+          });
+          optionsWrap.appendChild(grid);
+          return;
+        }
+
+        optionsWrap.style.display = "none";
+      }
+
       function setQuestionUI(q) {
         currentQuestion = q || null;
         el("questionBox").textContent = currentQuestion ? `${currentQuestion.text} (${currentQuestion.question_type})` : "No question.";
 
-        // toggle input widgets
-        stageWrap.style.display = (currentQuestion && currentQuestion.key === "declared_stage") ? "block" : "none";
-        goalsWrap.style.display = (currentQuestion && currentQuestion.key === "declared_goals") ? "block" : "none";
-        el("answerText").style.display = (currentQuestion && (currentQuestion.key === "declared_stage" || currentQuestion.key === "declared_goals")) ? "none" : "block";
+        renderOptions(currentQuestion);
+
+        const isSelect = currentQuestion && (currentQuestion.input_type === "single_select" || currentQuestion.input_type === "multi_select") && (currentQuestion.options || []).length > 0;
+        el("answerText").style.display = isSelect ? "none" : "block";
 
         el("answerBtn").disabled = !currentQuestion;
-      }
-
-      function selectedGoals() {
-        return Array.from(document.querySelectorAll(".goalCb"))
-          .filter((cb) => cb.checked)
-          .map((cb) => cb.value);
       }
 
       el("startBtn").addEventListener("click", async () => {
@@ -245,11 +261,14 @@
         try {
           setStatus("");
           let answer = el("answerText").value.trim();
-          if (currentQuestion.key === "declared_stage") {
-            answer = stageSelect.value;
+          if (currentQuestion.input_type === "single_select") {
+            const sel = document.getElementById("dynSelect");
+            if (sel) answer = sel.value;
           }
-          if (currentQuestion.key === "declared_goals") {
-            answer = selectedGoals();
+          if (currentQuestion.input_type === "multi_select") {
+            answer = Array.from(document.querySelectorAll(".dynCb"))
+              .filter((cb) => cb.checked)
+              .map((cb) => cb.value);
           }
           const data = await request(`/sessions/${sessionId}/answers`, {
             method: "POST",

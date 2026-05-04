@@ -17,6 +17,7 @@ from app.schemas.profile_engine import (
     NeedRouting,
     NeedState,
     ReadinessAssessment,
+    ReadinessLevel,
     SessionState,
 )
 from app.services.llm.client import LLMClient, LLMClientError
@@ -59,6 +60,11 @@ async def build_profile(state: SessionState, llm: LLMClient) -> FinalProfile:
     except (LLMClientError, ValueError) as exc:
         logger.warning("Profile builder LLM call failed: %s — using raw extracted data", exc)
         enriched = {}
+
+    # Stage-field eligibility guardrails (idea-stage should not imply operational maturity).
+    if readiness.readiness_level == ReadinessLevel.IDEA_STAGE:
+        if not extracted.revenue_model and not state.answers.get("revenue_model"):
+            enriched["revenue_model"] = None
 
     return FinalProfile(
         session_id=state.session_id,
@@ -106,7 +112,15 @@ def _parse_llm_response(data: dict) -> dict:
 
 
 def _safe_str(v: object) -> str | None:
-    return str(v).strip() if v else None
+    if v is None:
+        return None
+    text = str(v).strip()
+    if not text:
+        return None
+    lowered = text.lower()
+    if lowered in {"null", "none", "na", "n/a", "undefined"}:
+        return None
+    return text
 
 
 def _safe_list(v: object) -> list[str]:

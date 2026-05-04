@@ -212,9 +212,15 @@ async def answer_question(
         )
 
     if state.status == SessionStatus.COMPLETE:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Session is already complete. Fetch the profile instead.",
+        return EngineStepResponse(
+            session_id=session_id,
+            status=SessionStatus.COMPLETE,
+            next_question=None,
+            profile_ready=True,
+            message="Session is already complete.",
+            confidence_score=state.confidence_score,
+            recommended_action=_recommended_action(state.confidence_score),
+            baseline_remaining=_baseline_remaining(state),
         )
 
     if state.status == SessionStatus.FAILED:
@@ -227,6 +233,14 @@ async def answer_question(
     question_text = _get_question_text(body.question_key)
 
     try:
+        # Validate answer against question constraints
+        is_valid, error_msg = _validate_answer(body.question_key, body.answer)
+        if not is_valid:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=error_msg or "Answer validation failed.",
+            )
+
         answer_text = _answer_to_text(body.answer)
 
         await repo.save_answer(
@@ -274,6 +288,74 @@ async def answer_question(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Unexpected error processing answer.",
+        ) from exc
+
+
+@router.post(
+    "/sessions/{session_id}/answer-more",
+    response_model=EngineStepResponse,
+    summary="Enable optional questions to enhance results",
+)
+async def answer_more(
+    session_id: uuid.UUID,
+    repo: RepoDep,
+    orchestrator: OrchestratorDep,
+    db: DbDep,
+) -> EngineStepResponse:
+    """
+    Enable optional follow-up questions to enhance the profile.
+    
+    This is called when the user clicks "Answer More" to provide additional
+    information and get better results.
+    
+    Returns the next optional question or indicates the profile is ready.
+    """
+    state = await repo.load_session_state(session_id)
+    if state is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Session {session_id} not found.",
+        )
+
+    if state.status == SessionStatus.COMPLETE:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Session is already complete. Fetch the profile instead.",
+        )
+
+    if state.status == SessionStatus.FAILED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Session has failed. Start a new session.",
+        )
+
+    try:
+        result = await orchestrator.enable_optional_questions(state)
+        
+        state.status = result.status
+        state.pending_question = result.next_question
+        state.confidence_score = result.confidence_score
+        
+        await repo.update_session_from_state(state)
+        await db.commit()
+        
+        return EngineStepResponse(
+            session_id=session_id,
+            status=result.status,
+            next_question=result.next_question,
+            profile_ready=(result.status == SessionStatus.BUILDING_PROFILE or result.status == SessionStatus.COMPLETE),
+            message=result.message or "Ready for optional questions.",
+            confidence_score=result.confidence_score,
+            recommended_action=_recommended_action(result.confidence_score),
+            baseline_remaining=_baseline_remaining(state),
+        )
+
+    except Exception as exc:
+        await db.rollback()
+        logger.exception("Error enabling optional questions for session %s: %s", session_id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Unexpected error enabling optional questions.",
         ) from exc
 
 
@@ -524,6 +606,70 @@ def _get_question_text(question_key: str) -> str:
         if q["key"] == question_key:
             return q["text"]
     return question_key  # Fallback: use key as text for custom questions
+
+
+def _get_question_def(question_key: str) -> dict | None:
+    """Look up the question definition from QUESTION_BANK."""
+    for q in QUESTION_BANK:
+        if q["key"] == question_key:
+            return q
+    return None
+
+
+def _validate_answer(question_key: str, answer: str | list[str]) -> tuple[bool, str | None]:
+    """
+    Validate answer against question constraints.
+    
+    Returns: (is_valid, error_message)
+    
+    Validation rules:
+    - If allow_custom=False and options exist, reject values not in options.
+    - If allow_multiple=False, reject list answers.
+    - If allow_multiple=True, accept list and dedupe.
+    """
+    q_def = _get_question_def(question_key)
+    if not q_def:
+        # No constraints for unknown questions
+        return True, None
+    
+    # Get constraints from definition
+    allow_custom = q_def.get("allow_custom", True)
+    allow_multiple = q_def.get("allow_multiple", False)
+    options = q_def.get("options", [])
+    
+    # Check if answer is a list
+    is_list = isinstance(answer, list)
+    
+    # Rule 1: If allow_multiple=False, reject list answers
+    if not allow_multiple and is_list:
+        return False, f"Question '{question_key}' does not accept multiple values."
+    
+    # Rule 2: If allow_multiple=True but answer is a string, accept it
+    # (frontend may send single value for multi-select sometimes)
+    if allow_multiple and isinstance(answer, str):
+        answer = [answer]  # Convert to list for validation
+    
+    # Rule 3: If options exist and allow_custom=False, validate against options
+    if options and not allow_custom:
+        option_values = {opt["value"] for opt in options}
+        
+        if is_list:
+            invalid_values = [v for v in answer if v not in option_values]
+            if invalid_values:
+                return (
+                    False,
+                    f"Invalid values for question '{question_key}': {invalid_values}. "
+                    f"Allowed: {list(option_values)}"
+                )
+        else:
+            if answer not in option_values:
+                return (
+                    False,
+                    f"Invalid value '{answer}' for question '{question_key}'. "
+                    f"Allowed: {list(option_values)}"
+                )
+    
+    return True, None
 
 
 def _answer_to_text(answer: str | list[str]) -> str:

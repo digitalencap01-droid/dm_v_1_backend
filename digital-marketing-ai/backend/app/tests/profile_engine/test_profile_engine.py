@@ -32,6 +32,7 @@ from app.schemas.profile_engine import (
     NeedState,
     PersonaType,
     Question,
+    QuestionOption,
     QuestionType,
     ReadinessAssessment,
     ReadinessLevel,
@@ -48,6 +49,7 @@ from app.services.profile_engine.normalizer import (
 )
 from app.services.profile_engine.question_selector import select_question
 from app.services.profile_engine import dynamic_required
+from app.services.profile_engine.orchestrator import _parse_monthly_revenue_to_int
 
 
 # ===========================================================================
@@ -276,6 +278,49 @@ class TestQuestionSelector:
         assert q is not None
         assert q.question_type == QuestionType.OPTIONAL
 
+    def test_idea_stage_skips_website_url_optional(self, full_state):
+        full_state.answers = {
+            "declared_stage": "idea_stage",
+            "declared_goals": "[\"brand_awareness\"]",
+            "team_size": "solo",
+        }
+        full_state.declared_stage = ReadinessLevel.IDEA_STAGE
+        full_state.allow_optional = True
+        q = select_question(full_state)
+        assert q is not None
+        assert q.key != "website_url"
+
+    def test_non_idea_stage_can_receive_website_url_optional(self, full_state):
+        full_state.answers = {
+            "declared_stage": "mvp",
+            "declared_goals": "[\"brand_awareness\"]",
+            "team_size": "solo",
+        }
+        full_state.declared_stage = ReadinessLevel.MVP
+        full_state.allow_optional = True
+        q = select_question(full_state)
+        assert q is not None
+        assert q.key == "website_url"
+
+
+# ===========================================================================
+# 3.5. Answer normalization unit tests
+# ===========================================================================
+
+
+class TestAnswerNormalization:
+    def test_monthly_revenue_numeric_parsing(self):
+        assert _parse_monthly_revenue_to_int("1000rs") == 1000
+        assert _parse_monthly_revenue_to_int("₹1,200") == 1200
+        assert _parse_monthly_revenue_to_int("10k") == 10000
+        assert _parse_monthly_revenue_to_int("1 lakh") == 100000
+        assert _parse_monthly_revenue_to_int("2 crore") == 20000000
+
+    def test_monthly_revenue_nullish_is_zero(self):
+        assert _parse_monthly_revenue_to_int("no") == 0
+        assert _parse_monthly_revenue_to_int("none") == 0
+        assert _parse_monthly_revenue_to_int("0") == 0
+
 
 # ===========================================================================
 # 4. Orchestrator integration tests (mocked LLM)
@@ -378,6 +423,37 @@ class TestOrchestrator:
         assert result.next_question.key == "declared_stage"
 
     @pytest.mark.asyncio
+    async def test_baseline_hydrates_extracted_goals_and_description(self):
+        from app.services.profile_engine.orchestrator import ProfileEngineOrchestrator
+
+        orchestrator = ProfileEngineOrchestrator(llm=self._make_llm_mock())
+        sid = uuid.uuid4()
+        state = SessionState(
+            session_id=sid,
+            status=SessionStatus.ASKING_QUESTIONS,
+            raw_input="",
+            answers={
+                "declared_stage": "idea_stage",
+                "team_size": "2",
+                "declared_goals": "[\"brand_awareness\"]",
+                "target_market_geo": "local",
+            },
+            required_slots_filled={
+                ResearchSlot.OFFER: "t-shirts, hoodies",
+                ResearchSlot.ICP: "college students",
+            },
+        )
+
+        # No extraction results yet; baseline hydration should create extracted fields.
+        orchestrator._sync_baseline_fields(state)
+        orchestrator._hydrate_extracted_from_baseline(state)
+        orchestrator._hydrate_extracted_from_required_slots(state)
+
+        assert state.extracted is not None
+        assert state.extracted.mentioned_goals == ["brand_awareness"]
+        assert state.extracted.description is not None
+
+    @pytest.mark.asyncio
     async def test_process_answer_updates_state(self, full_state):
         from app.services.profile_engine.orchestrator import ProfileEngineOrchestrator
 
@@ -475,6 +551,34 @@ class TestSchemas:
         assert state.answers == {}
         assert state.confidence_score == 0.0
 
+    def test_question_option_requires_text_defaults(self):
+        opt = QuestionOption(value="other", label="Other")
+        assert opt.requires_text is False
+        assert opt.text_placeholder is None
+
+
+class TestProfileBuilderNullHandling:
+    def test_safe_str_treats_null_like_none(self):
+        from app.services.profile_engine.profile_builder import _parse_llm_response
+
+        enriched = _parse_llm_response(
+            {
+                "business_name": "null",
+                "target_audience": "None",
+                "product_or_service": "  ",
+                "revenue_model": "N/A",
+                "current_challenges": [],
+                "goals": [],
+                "recommended_channels": [],
+                "summary": "undefined",
+            }
+        )
+        assert enriched["business_name"] is None
+        assert enriched["target_audience"] is None
+        assert enriched["product_or_service"] is None
+        assert enriched["revenue_model"] is None
+        assert enriched["summary"] is None
+
 
 # ===========================================================================
 # 6. Dynamic required slots unit tests
@@ -529,3 +633,65 @@ class TestDynamicRequired:
         )
         assert state.required_slots_filled[ResearchSlot.OFFER]
         assert ResearchSlot.OFFER not in state.required_slots_missing
+
+
+# ===========================================================================
+# 7. Deterministic fallbacks unit tests
+# ===========================================================================
+
+
+class TestDeterministicFallbacks:
+    @pytest.mark.asyncio
+    async def test_need_routing_goal_fallback_sets_primary_need(self):
+        from app.services.profile_engine.need_routing import route_need
+
+        llm = MagicMock()
+        llm.complete_json = AsyncMock(
+            return_value={
+                "primary_need": "unknown",
+                "secondary_needs": [],
+                "need_confidence": 0.2,
+                "reasoning": "Not enough info.",
+            }
+        )
+
+        extracted = ExtractedData(description="Test business", current_challenges=[], mentioned_goals=[])
+        classified = ClassifiedProfile(persona=PersonaType.FOUNDER, industry=IndustryType.OTHER)
+        readiness = ReadinessAssessment(readiness_level=ReadinessLevel.UNKNOWN)
+        answers = {"declared_goals": "[\"lead_generation\"]"}
+
+        routing = await route_need(
+            extracted=extracted,
+            classified=classified,
+            readiness=readiness,
+            answers=answers,
+            llm=llm,
+        )
+        assert routing.primary_need == NeedState.LEAD_GENERATION
+        assert routing.need_confidence >= 0.5
+
+    @pytest.mark.asyncio
+    async def test_classifier_offer_fallback_maps_apparel_to_ecommerce(self):
+        from app.services.profile_engine.classifier import classify
+
+        llm = MagicMock()
+        llm.complete_json = AsyncMock(
+            return_value={
+                "persona": "unknown",
+                "industry": "other",
+                "persona_confidence": 0.4,
+                "industry_confidence": 0.2,
+            }
+        )
+
+        extracted = ExtractedData(
+            description="Selling hoodies online",
+            product_or_service="Hoodies and t-shirts",
+            raw_persona_hint=None,
+            raw_industry_hint=None,
+            confidence_hints={},
+        )
+
+        result = await classify(extracted=extracted, llm=llm)
+        assert result.industry == IndustryType.ECOMMERCE
+        assert result.industry_confidence >= 0.5
