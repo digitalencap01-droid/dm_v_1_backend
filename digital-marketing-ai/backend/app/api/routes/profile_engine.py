@@ -299,6 +299,9 @@ async def demo_research_report(
                 research_bundle=research_bundle,
             )
 
+        # Ensure all critical execution topics are explicitly covered.
+        report_text = _ensure_report_coverage(report_text)
+
         # Fix 2: Saare sources combine karo — research_task + search_runs
         research_sources = (
             research_bundle
@@ -964,6 +967,109 @@ Bottom line: Proceed with a measured pilot and data-led scaling.
 ## Assumptions & Limitations
 {limitations}
 """.strip()
+
+
+def _ensure_report_coverage(report_text: str) -> str:
+    """
+    Ensure the final report explicitly mentions all critical execution topics.
+    If topics are missing, append a coverage addendum so PDF always contains them.
+    """
+    if not report_text:
+        report_text = ""
+    low = report_text.lower()
+
+    checks = [
+        ("Financial cost breakdown", ["cost breakdown", "machine", "rent", "labour", "raw material"]),
+        ("Monthly operating expenses", ["monthly expenses", "electricity", "salary", "transport"]),
+        ("Cash flow projection", ["cash flow"]),
+        ("Worst-case scenario", ["worst-case", "downside", "loss scenario"]),
+        ("Net margin assumptions clarity", ["net margin", "tax", "distributor margin"]),
+        ("Break-even calculation", ["break-even"]),
+        ("Competitor pricing comparison", ["competitor", "price comparison", "pricing"]),
+        ("Competitor strategy and market share", ["market share", "strategy"]),
+        ("Ground validation plan", ["customer survey", "retailer feedback", "ground data"]),
+        ("Product strategy and USP", ["usp", "product strategy", "quality standard"]),
+        ("Distribution model", ["dealer margin", "distribution", "logistics", "retail penetration"]),
+        ("Marketing budget and ROI", ["marketing budget", "roi", "positioning"]),
+        ("Legal and compliance detail", ["pollution", "factory safety", "labour law", "gst", "license"]),
+        ("Operational planning", ["machine", "production capacity", "supply chain"]),
+        ("Risk analysis depth", ["price fluctuation", "demand drop", "price war"]),
+        ("Location-specific proof", ["local competitor", "market size", "ambala", "location"]),
+        ("Customer insight depth", ["buying behavior", "pain point", "brand loyalty"]),
+        ("Execution complexity", ["credit cycle", "entry barrier", "distribution network"]),
+        ("Scalability and expansion", ["scalability", "expansion", "export", "bulk supply"]),
+        ("Unit economics", ["per unit", "unit economics", "cost per", "profit per unit"]),
+        ("Brand strategy", ["brand", "packaging", "positioning"]),
+        ("Exit strategy", ["exit strategy", "asset recovery"]),
+    ]
+
+    missing: list[str] = []
+    for title, keywords in checks:
+        if not any(k in low for k in keywords):
+            missing.append(title)
+
+    if not missing:
+        return report_text
+
+    addendum_lines = [
+        "",
+        "## Coverage Addendum (Gap Closure Checklist)",
+        "The following execution-critical items must be explicitly addressed before investment decisions:",
+    ]
+    for i, item in enumerate(missing, 1):
+        addendum_lines.append(f"{i}. {item}: Evidence is limited here - add field survey + verified local numbers.")
+    addendum_lines.append(
+        "Bottom line: Use this report for direction, but finalize decisions only after these gaps are closed."
+    )
+
+    addendum_lines.extend([
+        "",
+        "## Business-Ready Upgrade Pack (Actionable Fixes)",
+        "### 1) Financial Section (Execution Format)",
+        "- Add monthly rent, interiors, initial inventory, staff salary, and marketing line-items.",
+        "- Add 6-12 month cash-flow table with opening cash, inflow, outflow, closing cash.",
+        "- Add break-even month and downside (20-30% lower sales) scenario.",
+        "### 2) Unit Economics (Per Category)",
+        "- For each SKU bucket (shirts, jeans, kurtas): cost price, selling price, gross margin, net margin after overhead.",
+        "- Add formula: Net Profit per unit = Selling Price - Product Cost - Allocated Operating Cost.",
+        "### 3) Ground Market Validation",
+        "- Include 10-20 retailer interviews and 30-50 customer responses with date/location notes.",
+        "- Add local proof points: preferred price bands, top-moving brands, repeat-buy drivers.",
+        "### 4) Local Competitor Matrix",
+        "- Add top 5 local shops/brands with price range, assortment, crowd type, and service gaps.",
+        "- Add positioning decision: budget vs mid-range vs premium value.",
+        "### 5) Product + USP Clarity",
+        "- Define product mix % (e.g., basics vs trend wear) and target ticket size.",
+        "- Write one-line USP: why buyer should prefer you over nearby alternatives.",
+        "### 6) Supply Chain & Inventory",
+        "- Add source markets, MOQ, lead time, return policy, and credit terms.",
+        "- Add inventory policy: fast/slow moving SKUs, reorder point, dead-stock clearance rule.",
+        "### 7) Marketing Plan with ROI",
+        "- Add monthly channel budget split (Meta, local ads, WhatsApp, creator collab).",
+        "- Add expected leads/sales/CAC by channel with weekly optimization checkpoints.",
+        "### 8) Pricing Formula",
+        "- Use clear pricing logic by category and compare against local benchmark prices.",
+        "### 9) Risk Register",
+        "- Cover unsold stock, seasonality dips, supplier delay, and price-war response plan.",
+        "### 10) Location Decision",
+        "- Add target market areas, footfall estimate, rent range, and area selection logic.",
+        "### 11) Realistic Timeline",
+        "- Separate phases: research, sourcing, setup, soft-launch, optimization.",
+        "### 12) Branding & Store Experience",
+        "- Add brand name direction, visual identity, packaging tags, in-store vibe intent.",
+        "### 13) Sales Channel Plan",
+        "- Define offline + WhatsApp + Instagram + marketplace expansion sequence.",
+        "### 14) Exit / Backup Plan",
+        "- Add stock liquidation, fixture resale, and recovery thresholds if demand underperforms.",
+        "### Top 5 Priority Fixes Before Launch",
+        "1. Unit economics by category",
+        "2. Ground market survey proof",
+        "3. Competitor pricing matrix",
+        "4. Inventory and dead-stock policy",
+        "5. 6-12 month cash-flow projection",
+    ])
+
+    return report_text.rstrip() + "\n" + "\n".join(addendum_lines) + "\n"
 
 
 def _basic_idea_quality_checks(business_idea: str) -> str | None:

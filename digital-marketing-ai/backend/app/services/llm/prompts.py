@@ -564,12 +564,55 @@ def _compact_conversation_for_prompt(conversation_history: list[dict]) -> list[d
     return compact
 
 
-def _compact_research_bundle_for_prompt(research_bundle: dict) -> dict:
+def _keyword_tokens(text: str) -> set[str]:
+    tokens: set[str] = set()
+    for raw in text.lower().split():
+        token = "".join(ch for ch in raw if ch.isalnum())
+        if len(token) >= 4:
+            tokens.add(token)
+    return tokens
+
+
+def _build_relevance_terms(intake: dict | None) -> set[str]:
+    if not intake:
+        return set()
+    parts = [
+        str(intake.get("business_idea") or ""),
+        str(intake.get("target_audience") or ""),
+        str(intake.get("location") or ""),
+        str(intake.get("stage") or ""),
+        str(intake.get("context") or ""),
+        "market pricing competitor customer demand distribution compliance",
+    ]
+    terms: set[str] = set()
+    for part in parts:
+        terms.update(_keyword_tokens(part))
+    return terms
+
+
+def _is_relevant_evidence(text: str, terms: set[str]) -> bool:
+    if not text.strip():
+        return False
+    low = text.lower()
+    if any(x in low for x in ["cookie policy", "privacy policy", "terms of service", "javascript required", "sign in", "log in"]):
+        return False
+    if not terms:
+        return True
+    return bool(_keyword_tokens(text).intersection(terms))
+
+
+def _compact_research_bundle_for_prompt(research_bundle: dict, intake: dict | None = None) -> dict:
+    relevance_terms = _build_relevance_terms(intake)
+    dropped_irrelevant = 0
     # ✅ FIX: 8 → 20 (saare search runs pass karo)
     search_runs = []
     for run in (research_bundle.get("search_runs") or [])[:20]:
         top_results = []
         for result in (run.get("results") or [])[:4]:  # ✅ 3 → 4
+            combined = f"{result.get('title') or ''} {result.get('content') or ''}"
+            if not _is_relevant_evidence(combined, relevance_terms):
+                dropped_irrelevant += 1
+                continue
             top_results.append(
                 {
                     "title": _compact_text(result.get("title"), 120),     # ✅ 90 → 120
@@ -590,6 +633,10 @@ def _compact_research_bundle_for_prompt(research_bundle: dict) -> dict:
     # ✅ FIX: 4 → 8 results, 260 → 1200 chars
     extract_results = []
     for item in (research_bundle.get("extract", {}).get("results") or [])[:8]:
+        combined = f"{item.get('title') or ''} {item.get('content') or ''}"
+        if not _is_relevant_evidence(combined, relevance_terms):
+            dropped_irrelevant += 1
+            continue
         extract_results.append(
             {
                 "title": _compact_text(item.get("title"), 120),
@@ -603,6 +650,10 @@ def _compact_research_bundle_for_prompt(research_bundle: dict) -> dict:
     for crawl in (research_bundle.get("crawl_runs") or [])[:5]:
         pages = []
         for item in (crawl.get("data") or [])[:5]:                       # ✅ 3 → 5
+            combined = f"{item.get('title') or ''} {item.get('content') or ''}"
+            if not _is_relevant_evidence(combined, relevance_terms):
+                dropped_irrelevant += 1
+                continue
             pages.append(
                 {
                     "title": _compact_text(item.get("title"), 120),
@@ -644,6 +695,10 @@ def _compact_research_bundle_for_prompt(research_bundle: dict) -> dict:
     # ✅ FIX: 3 → 5 review runs, limits badhaye
     reviews_runs = []
     for run in (research_bundle.get("reviews_runs") or [])[:5]:
+        combined = f"{run.get('summary') or ''} {' '.join(run.get('snippets') or [])}"
+        if not _is_relevant_evidence(combined, relevance_terms):
+            dropped_irrelevant += 1
+            continue
         reviews_runs.append({
             "source": run.get("source"),
             "query": _compact_text(run.get("query"), 160),               # ✅ 120 → 160
@@ -655,6 +710,10 @@ def _compact_research_bundle_for_prompt(research_bundle: dict) -> dict:
     return {
         "report_mode": research_bundle.get("report_mode"),
         "warnings": research_bundle.get("warnings") or [],
+        "relevance_filter": {
+            "enabled": True,
+            "dropped_irrelevant_items": dropped_irrelevant,
+        },
         "search_runs": search_runs,
         "extract": {
             "ok": research_bundle.get("extract", {}).get("ok"),
@@ -863,7 +922,11 @@ def build_bizmentor_research_report_prompt(
     }
     intake_json = json.dumps(compact_intake, ensure_ascii=False, indent=2)
     convo_json = json.dumps(_compact_conversation_for_prompt(conversation_history), ensure_ascii=False, indent=2)
-    research_json = json.dumps(_compact_research_bundle_for_prompt(research_bundle), ensure_ascii=False, indent=2)
+    research_json = json.dumps(
+        _compact_research_bundle_for_prompt(research_bundle, intake=compact_intake),
+        ensure_ascii=False,
+        indent=2,
+    )
     report_mode = intake.get("report_mode") or intake.get("reportMode") or "Standard Plan"
 
     # Try loading external structure file; fall back to embedded 10D structure
@@ -903,6 +966,7 @@ Every recommendation in this report MUST satisfy 4 criteria:
 EVIDENCE & HONESTY RULES
 ═══════════════════════════════════════════════════════════
 - Base every major claim on the supplied research bundle.
+- Ignore irrelevant snippets/pages (policy/login/generic unrelated pages) and use only business-relevant evidence.
 - If evidence is thin for a section, write: "Evidence is limited here — recommend follow-up research on [specific topic]" instead of guessing.
 - If the research bundle contains warnings, mention them in an "Assumptions & Limitations" subsection.
 - Tag each major recommendation with confidence: [High] / [Medium] / [Low].
@@ -948,6 +1012,28 @@ OUTPUT FORMATTING
 - Bold key numbers and decisions.
 - End each major section with a 1-line "Bottom line:" takeaway.
 - Final verdict must be one of: Go / Pivot / Wait / Avoid (with confidence score 1-10).
+
+MANDATORY EXECUTION-COVERAGE CHECKLIST (MUST EXPLICITLY ADDRESS)
+- Detailed financial planning: machine/rent/labour/raw material, monthly opex, cash flow, worst-case downside
+- Profit reality: tax assumptions, distributor margin assumptions, break-even math
+- Competition depth: pricing comparison, competitor strategy, market-share cues
+- Ground validation: customer survey plan, retailer interviews, local demand checks
+- Product strategy: exact product mix, USP, quality standards
+- Distribution model: dealer margin stack, logistics cost, retail penetration plan
+- Marketing rigor: budget split, ROI expectations, brand positioning
+- Legal/compliance: pollution/safety/labour + licensing checklist
+- Operations: machine types, capacity plan, supply chain design
+- Risk register: raw material volatility, demand drop, price-war response
+- Location specifics: local market size proof, local competitor list, local pricing
+- Customer insight depth: pain points, buying behavior, loyalty patterns
+- Execution complexity: credit cycle, entry barriers, network build difficulty
+- Assumptions realism: optimistic assumptions and stress-tested alternatives
+- Data reliability: source quality tiers and where evidence is weak
+- Timeline realism: realistic setup and licensing delays
+- Scalability: expansion roadmap, bulk supply/export optionality
+- Unit economics: cost per unit, selling price range, profit per unit
+- Branding: naming, packaging, positioning strategy
+- Exit strategy: shutdown trigger points and asset recovery plan
 
 ═══════════════════════════════════════════════════════════
 INPUTS
