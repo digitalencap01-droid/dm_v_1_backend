@@ -562,9 +562,23 @@ class BizMentorPDFGenerator:
              report_data.get('final_verdict', '')),
         ]
 
+        # If parser could not map most sections, do not lose report data.
+        # Render the full raw AI output in dedicated sections so PDF always
+        # carries the complete narrative.
+        filled_sections = sum(1 for _, c in sections if c and c.strip())
+        if filled_sections <= 2 and report_content and report_content.strip():
+            raw_text = report_content.strip()
+            sections = [
+                ("1. Full Research Narrative", raw_text),
+                ("2. Extracted Strategic Highlights", report_data.get('executive_summary', '')),
+                ("3. Final Verdict & Next Steps", report_data.get('final_verdict', raw_text)),
+            ]
+
         for section_title, section_content in sections:
             elements.extend(self._create_section_content(section_title, section_content))
-            elements.append(PageBreak())
+            elements.append(Spacer(1, 10))
+            elements.append(HRFlowable(width="100%", thickness=0.7, color=colors.HexColor('#e6e6e6')))
+            elements.append(Spacer(1, 10))
 
         # Sources section
         if report_data.get('sources'):

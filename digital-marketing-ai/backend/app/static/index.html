@@ -1158,7 +1158,11 @@ function restoreUiSession() {
     return;
   }
 
-  if (!raw) return;
+  if (!raw) {
+    // Load demo data if no session exists
+    loadDemoData();
+    return;
+  }
 
   let state = null;
   try {
@@ -1168,7 +1172,10 @@ function restoreUiSession() {
     return;
   }
 
-  if (!state) return;
+  if (!state) {
+    loadDemoData();
+    return;
+  }
 
   conversationHistory = Array.isArray(state.conversationHistory) ? state.conversationHistory : [];
   sessionStarted = Boolean(state.sessionStarted);
@@ -1219,6 +1226,33 @@ function restoreUiSession() {
   applyModuleStates(state.moduleStates);
   updateProgress(sessionProgress);
   scrollToBottom();
+}
+
+function loadDemoData() {
+  // Automatically load demo form data on first page load
+  const demoData = {
+    businessIdea: 'I want to start the new business of watch',
+    targetAudience: 'tier-2-cities',
+    budgetRevenue: '',
+    location: 'ambala city haryana',
+    context: '',
+    goals: ['lead generation'],
+  };
+
+  applyPlannerDraft(demoData);
+  plannerStage = 'idea stage';
+  plannerTeamSize = '2-5';
+  reportMode = 'Standard Plan';
+
+  applyChoiceSelection('#reportModeGrid', 'data-report-mode', reportMode);
+  applyChoiceSelection('#stageGrid', 'data-stage-value', plannerStage);
+  applyChoiceSelection('#teamSizeGrid', 'data-team-size', plannerTeamSize);
+
+  document.getElementById('sb-mode').textContent = reportMode;
+  document.getElementById('modeBadgeText').textContent = reportMode;
+  document.getElementById('modeBadge').classList.add('visible');
+
+  saveUiSession();
 }
 
 const CLEAN_SYSTEM_PROMPT = normalizeMojibake(SYSTEM_PROMPT);
@@ -2372,6 +2406,11 @@ document.querySelectorAll('#goalOptions input[type="checkbox"]').forEach((el) =>
 
 normalizeStaticUi();
 restoreUiSession();
+
+// Auto-start new business session with demo data if no session exists
+if (!userStage) {
+  startSession('new');
+}
 </script>
 </body>
 </html>

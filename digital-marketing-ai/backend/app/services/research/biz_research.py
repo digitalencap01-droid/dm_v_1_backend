@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -9,6 +10,18 @@ import logging
 logger = logging.getLogger(__name__)
 
 from app.services.research.tavily_client import TavilyClientError, TavilyResearchClient
+
+
+def _log_tavily_payload(label: str, payload: Any) -> None:
+    """Print Tavily payloads to terminal logs for debugging visibility."""
+    try:
+        logger.info(
+            "Tavily payload [%s]: %s",
+            label,
+            json.dumps(payload, ensure_ascii=False, default=str),
+        )
+    except Exception:
+        logger.info("Tavily payload [%s]: %s", label, str(payload))
 
 
 def _load_report_structure() -> str:
@@ -245,6 +258,7 @@ def _site_root_limit(intake: dict[str, Any]) -> int:
 async def _safe_step(name: str, coro: Any) -> dict[str, Any]:
     try:
         result = await coro
+        _log_tavily_payload(name, result)
         return {"step": name, "ok": True, "result": result}
     except Exception as exc:
         logger.error("Research step '%s' failed: %s", name, exc)  # ✅ FIX
@@ -616,15 +630,26 @@ async def _build_tavily_research_bundle(
             "Deep Tavily research did not finish in time. Report was generated from completed search, extract, map, and crawl evidence."
         ]
         if not successful_searches:
-            raise TavilyClientError(
-                "No Tavily search results available. Check API key and network connection."
-            )
+            # Check if failures are due to usage limit exceeded (432 errors)
+            all_errors = [run.get("error", "") for run in search_runs + reviews_runs if not run.get("ok")]
+            usage_limit_errors = [e for e in all_errors if "432" in str(e) or "usage limit" in str(e).lower() or "plan" in str(e).lower()]
+            
+            if usage_limit_errors:
+                raise TavilyClientError(
+                    f"Tavily API usage limit exceeded. {usage_limit_errors[0]}"
+                )
+            else:
+                raise TavilyClientError(
+                    "No Tavily search results available. Check API key and network connection."
+                )
         logger.warning(
             "Tavily deep research timed out but %d search runs completed — proceeding with available data.",
             len(successful_searches)
         )
     else:
         bundle["warnings"] = []
+
+    _log_tavily_payload("research_bundle_final", bundle)
 
     return bundle
 
